@@ -5,7 +5,13 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
+  StyleSheet, // 💡 Make sure this is added!
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+
 
 import API from "../../src/services/api";
 
@@ -78,25 +84,20 @@ export default function LessonPlayer() {
     }
   );
 
-  // ===========================
+   // ===========================
   // MARK LESSON COMPLETE
   // ===========================
-
   const markComplete = async () => {
-  try {
-    const token = await AsyncStorage.getItem("token");
+    try {
+      const token = await AsyncStorage.getItem("token");
 
-    API.defaults.headers.common.Authorization = `Bearer ${token}`;
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
-    await API.put(`/courses/${courseId}/progress`, {
-      lessonId: lesson._id,
-    }); // Fixed: Removed the extra closing parenthesis here
-  } catch (error) {
-    console.error(error); // Added: Essential to catch and log potential errors
-  }
-};
+      await API.put(`/courses/${courseId}/progress`, {
+        lessonId: lesson._id,
+      });
 
-
+      // The Success Alert must stay inside the try block
       Alert.alert(
         "Success",
         "Lesson completed!",
@@ -105,8 +106,7 @@ export default function LessonPlayer() {
             text: "OK",
             onPress: () =>
               router.replace({
-                pathname:
-                  "/(student)/course-player",
+                pathname: "/(student)/course-player",
                 params: {
                   id: courseId,
                 },
@@ -116,6 +116,7 @@ export default function LessonPlayer() {
       );
 
     } catch (err: any) {
+      console.error(err);
       Alert.alert(
         "Error",
         err.response?.data?.message ||
@@ -123,6 +124,7 @@ export default function LessonPlayer() {
       );
     }
   };
+ 
 
   // ===========================
   // LOADING

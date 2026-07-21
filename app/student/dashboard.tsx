@@ -320,7 +320,7 @@ export default function StudentDashboard() {
 
       {data?.announcements?.length > 0 ? (
 
-        data.announcements.map((item: any) => (
+        data?.announcements?.map((item: any) => (
 
           <NewsCard
             key={item._id}

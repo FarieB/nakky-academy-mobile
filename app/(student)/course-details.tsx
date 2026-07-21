@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native"; // Added Focus Hook
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react"; // Replaced useEffect with useCallback
 import {
   ActivityIndicator,
   Alert,
@@ -23,9 +24,12 @@ export default function CourseDetails() {
   const [course, setCourse] = useState<any>(null);
   const [enrolled, setEnrolled] = useState(false);
 
-  useEffect(() => {
-    loadCourse();
-  }, []);
+  // Automatically refresh when the user returns to this screen from PayFast browser
+  useFocusEffect(
+    useCallback(() => {
+      loadCourse();
+    }, [id])
+  );
 
   const loadCourse = async () => {
     try {
@@ -34,7 +38,9 @@ export default function CourseDetails() {
 
       const res = await API.get(`/courses/${id}`);
       setCourse(res.data);
-      setEnrolled(res.data.paymentStatus === "paid");
+      
+      // UPGRADE: Evaluates enrollment cleanly using Step 3's dedicated boolean
+      setEnrolled(res.data.isEnrolled);
     } catch (err: any) {
       Alert.alert(
         "Error",
@@ -50,13 +56,16 @@ export default function CourseDetails() {
       const token = await AsyncStorage.getItem("token");
       API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
-      const res = await API.post(`/courses/${id}/purchase`);
+      const res = await API.get(`/courses/${id}/purchase`);
 
       await WebBrowser.openBrowserAsync(res.data.paymentUrl);
 
+      // Instantly poll the backend for any state updates right after browser dismissal
+      await loadCourse();
+
       Alert.alert(
-        "Payment",
-        "Once payment is complete, reopen the course."
+        "Payment Processed",
+        "Once payment updates complete via PayFast, this course layout unlocks automatically."
       );
     } catch (err: any) {
       Alert.alert(
@@ -168,10 +177,9 @@ export default function CourseDetails() {
 }
 
 // ======================================
-// STYLESHEET (Place your styles object here)
+// STYLESHEET
 // ======================================
 const styles = StyleSheet.create({
-  //const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -337,3 +345,4 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
+
