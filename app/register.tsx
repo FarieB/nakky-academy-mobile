@@ -9,7 +9,10 @@ export default function RegisterScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("employee");
+
+  // Changed employee -> candidate
+  const [role, setRole] = useState("candidate");
+
   const [loading, setLoading] = useState(false);
 
   const register = async () => {
@@ -32,11 +35,15 @@ export default function RegisterScreen() {
 
       router.replace("/login");
     } catch (err: any) {
-      console.log("REGISTER ERROR:", err?.response?.data || err.message);
+      console.log(
+        "REGISTER ERROR:",
+        err?.response?.data || err.message
+      );
 
       Alert.alert(
         "Registration failed",
-        err?.response?.data?.message || "Something went wrong"
+        err?.response?.data?.message ||
+          "Something went wrong"
       );
     } finally {
       setLoading(false);
@@ -45,46 +52,64 @@ export default function RegisterScreen() {
 
   return (
     <View style={{ padding: 20, marginTop: 80 }}>
-      <Text style={{ fontSize: 24, fontWeight: "bold" }}>
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: "bold",
+        }}
+      >
         Create Account
       </Text>
 
-      {/* NAME */}
       <TextInput
         placeholder="Full Name"
         value={name}
         onChangeText={setName}
-        style={{ borderWidth: 1, marginTop: 20, padding: 10 }}
+        style={{
+          borderWidth: 1,
+          marginTop: 20,
+          padding: 10,
+        }}
       />
 
-      {/* EMAIL */}
       <TextInput
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
-        style={{ borderWidth: 1, marginTop: 10, padding: 10 }}
+        style={{
+          borderWidth: 1,
+          marginTop: 10,
+          padding: 10,
+        }}
       />
 
-      {/* PASSWORD */}
       <TextInput
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        style={{ borderWidth: 1, marginTop: 10, padding: 10 }}
+        style={{
+          borderWidth: 1,
+          marginTop: 10,
+          padding: 10,
+        }}
       />
 
-      {/* ROLE SELECTION */}
-      <Text style={{ marginTop: 20, fontWeight: "bold" }}>
+      <Text
+        style={{
+          marginTop: 20,
+          fontWeight: "bold",
+        }}
+      >
         Select Role:
       </Text>
 
       <View style={{ marginTop: 10 }}>
         <Button
-          title={`Employee ${role === "employee" ? "✔" : ""}`}
-          onPress={() => setRole("employee")}
+          title={`Candidate ${role === "candidate" ? "✔" : ""}`}
+          onPress={() => setRole("candidate")}
         />
       </View>
 
@@ -109,17 +134,24 @@ export default function RegisterScreen() {
         />
       </View>
 
-      {/* REGISTER BUTTON */}
       <View style={{ marginTop: 20 }}>
         <Button
-          title={loading ? "Creating account..." : "Register"}
+          title={
+            loading
+              ? "Creating account..."
+              : "Register"
+          }
           onPress={register}
         />
       </View>
 
-      {/* BACK TO LOGIN */}
       <View style={{ marginTop: 10 }}>
-        <Button title="Back to Login" onPress={() => router.replace("/login")} />
+        <Button
+          title="Back to Login"
+          onPress={() =>
+            router.replace("/login")
+          }
+        />
       </View>
     </View>
   );

@@ -55,16 +55,18 @@ export default function LoginScreen() {
 
       Alert.alert("Success", `Logged in as ${role}`);
 
-    // 5. Role-based redirect
-       if (role === "employer") {
-  router.replace("/employer/dashboard");
-} else if (role === "employee") {
-  router.replace("/employee/dashboard");
-} else if (role === "student") {
-  router.replace("/student/dashboard");
-} else if (role === "admin") {
-  router.replace("/admin/dashboard");
-} 
+// 5. Role-based redirect
+    if (role === "employer") {
+      router.replace("/employer-dashboard");
+    } else if (role === "candidate") {
+      router.replace("/candidate-dashboard");
+    } else if (role === "student") {
+      router.replace("/student/dashboard");
+    } else if (role === "admin") {
+      router.replace("/admin/dashboard");
+    } else {
+      Alert.alert("Error", "Unknown user role.");
+    }
     } catch (err: any) {
       console.log("LOGIN ERROR:", err?.response?.data || err.message);
 
@@ -76,6 +78,7 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
 
   return (
     <View style={{ padding: 20, marginTop: 100 }}>

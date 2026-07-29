@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import API from "../../src/services/api";
+import { getSocket } from "../../src/socket/socket";
 
 import AdminStatCard from "../../components/AdminStatCard";
 import DashboardButton from "../../components/DashboardButton";
@@ -23,10 +24,9 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
-
+  // ==========================================
+  // Reusable Dashboard Loader (Moved Above useEffect)
+  // ==========================================
   const loadDashboard = async () => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -47,6 +47,28 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  // ==========================================
+  // Real-time Dashboard Socket Listener
+  // ==========================================
+  useEffect(() => {
+    loadDashboard();
+
+    const socket = getSocket();
+
+    if (!socket) return;
+
+    socket.off("admin_dashboard_update");
+
+    socket.on("admin_dashboard_update", () => {
+      console.log("📊 Admin dashboard updating...");
+      loadDashboard();
+    });
+
+    return () => {
+      socket.off("admin_dashboard_update");
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -87,11 +109,11 @@ export default function AdminDashboard() {
       </View>
 
       <View style={styles.row}>
-        <AdminStatCard
-          icon="💼"
-          title="Jobs"
-          value={`${data?.stats?.totalJobs ?? 0}`}
-        />
+       <AdminStatCard
+        icon="🧑‍💼"
+        title="Candidates"
+        value={`${data?.stats?.totalCandidates ?? 0}`}
+    /> 
 
         <AdminStatCard
           icon="💰"
@@ -164,8 +186,8 @@ export default function AdminDashboard() {
       />
 
       <DashboardButton
-        title={`Employees (${data?.stats?.totalEmployees ?? 0})`}
-        onPress={() => router.push("/admin/employees" as any)}
+       title={`Candidates (${data?.stats?.totalCandidates ?? 0})`}
+        onPress={() => router.push("/admin/candidates" as any)} 
       />
 
       <DashboardButton

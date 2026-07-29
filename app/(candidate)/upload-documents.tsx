@@ -22,7 +22,7 @@ export default function UploadDocuments() {
   const uploadDocuments = async () => {
     try {
       await API.post(
-        "/employee/upload-documents",
+        "/profile/candidate/upload-documents",
         {
           idDocument,
           policeClearance,

@@ -115,9 +115,7 @@ export default function PayVerificationScreen() {
             "Verification payment successful"
           );
 
-          router.replace(
-            "/employee/dashboard" as any
-          );
+         router.replace("/candidate/dashboard" as any); 
         }
 
         // ======================

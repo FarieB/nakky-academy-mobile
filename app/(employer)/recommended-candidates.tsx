@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,8 +11,7 @@ import {
 
 import API from "../../src/services/api";
 
-export default function JobMatches() {
-  const { jobId } = useLocalSearchParams();
+export default function RecommendedCandidates() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -23,9 +22,7 @@ export default function JobMatches() {
   // ==========================
   const fetchMatches = async () => {
     try {
-      const res = await API.get(
-        `/jobs/${jobId}/recommendations`
-      );
+      const res = await API.get("/recommendations/candidates");
 
       // FIXED
       setCandidates(res.data);
@@ -41,10 +38,8 @@ export default function JobMatches() {
   };
 
   useEffect(() => {
-    if (jobId) {
-      fetchMatches();
-    }
-  }, [jobId]);
+    fetchMatches();
+  }, []);
 
   // ==========================
   // LOADING
@@ -107,7 +102,6 @@ export default function JobMatches() {
                       "/employer/candidate-profile" as any,
                     params: {
                       id: item.candidate?._id,
-                      jobId: jobId,
                     },
                   })
                 }

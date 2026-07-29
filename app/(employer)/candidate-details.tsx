@@ -32,6 +32,8 @@ export default function CandidateDetails() {
   const [subscriptionActive, setSubscriptionActive] =
     useState(false);
 
+  const [saved, setSaved] = useState(false);
+
   const loadCandidate = async () => {
     try {
       const token =
@@ -80,6 +82,52 @@ export default function CandidateDetails() {
       setSubscriptionActive(false);
     }
   };
+
+  const saveCandidate = async () => {
+  try {
+    const token =
+      await AsyncStorage.getItem("token");
+
+    API.defaults.headers.common.Authorization =
+      `Bearer ${token}`;
+
+    await API.post(
+      "/profile/save-candidate",
+      {
+        candidateId: candidate._id,
+      }
+    );
+
+    setSaved(true);
+
+    Alert.alert(
+      "Success",
+      "Candidate saved successfully."
+    );
+
+  } catch (err: any) {
+
+    if (
+      err?.response?.status === 400
+    ) {
+
+      setSaved(true);
+
+      Alert.alert(
+        "Saved",
+        "Candidate is already in your saved list."
+      );
+
+      return;
+    }
+
+    Alert.alert(
+      "Error",
+      err?.response?.data?.message ||
+        "Unable to save candidate."
+    );
+  }
+};
 
   // Step 3 — Load it when the screen opens
   useEffect(() => {
@@ -335,40 +383,43 @@ export default function CandidateDetails() {
         style={styles.contactButton}
         onPress={() =>
           router.push({
-            pathname: "/(employer)/contact-candidate",
+            pathname: "/messaging/" + candidate._id,
             params: {
-              id: candidate._id,
+              name: candidate.firstName || candidate.name || "Candidate",
             },
           })
         }
       >
         <Text style={styles.contactButtonText}>
-          📞 Contact Candidate
+          💬 Message Candidate
         </Text>
       </TouchableOpacity>
     ) : (
       <TouchableOpacity
         style={styles.subscribeButton}
         onPress={() =>
-          router.push(
-            "/(employer)/subscription"
-          )
+          router.push("/subscribe")
         }
       >
         <Text
           style={styles.subscribeButtonText}
         >
-          🔒 Subscribe to Contact Candidate
+          🔒 Subscribe to Message Candidate
         </Text>
       </TouchableOpacity>
     )}
 
     <TouchableOpacity
-      style={styles.saveButton}
-    >
+      style={[
+        styles.saveButton,
+        saved && styles.savedButton,
+      ]}
+      disabled={saved}
+      onPress={saveCandidate}
+    > 
       <Text style={styles.saveButtonText}>
-        ❤ Save Candidate
-      </Text>
+        {saved ? "✓ Saved" : "❤ Save Candidate"}
+      </Text> 
     </TouchableOpacity>
 
     <TouchableOpacity
@@ -388,6 +439,7 @@ export default function CandidateDetails() {
 
  return null;
 }
+
 
 // Temporary empty stylesheet wrapper to prevent execution crash
 const styles = StyleSheet.create({
@@ -512,7 +564,7 @@ const styles = StyleSheet.create({
   },
 
   saveButton: {
-    backgroundColor: "#43A047",
+   backgroundColor: "#9E9E9E", 
     marginHorizontal: 18,
     marginTop: 15,
     paddingVertical: 18,
