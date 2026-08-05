@@ -1,6 +1,17 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Button, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
 import API from "../src/services/api";
 
 export default function RegisterScreen() {
@@ -10,7 +21,6 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Changed employee -> candidate
   const [role, setRole] = useState("candidate");
 
   const [loading, setLoading] = useState(false);
@@ -31,7 +41,10 @@ export default function RegisterScreen() {
         role,
       });
 
-      Alert.alert("Success", "Account created. Please login.");
+      Alert.alert(
+        "Success",
+        "Your account has been created successfully."
+      );
 
       router.replace("/login");
     } catch (err: any) {
@@ -43,7 +56,7 @@ export default function RegisterScreen() {
       Alert.alert(
         "Registration failed",
         err?.response?.data?.message ||
-          "Something went wrong"
+          "Something went wrong."
       );
     } finally {
       setLoading(false);
@@ -51,108 +64,249 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={{ padding: 20, marginTop: 80 }}>
-      <Text
-        style={{
-          fontSize: 24,
-          fontWeight: "bold",
-        }}
-      >
-        Create Account
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Image
+        source={require("../assets/images/logo.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+
+      <Text style={styles.title}>Create Account</Text>
+
+      <Text style={styles.subtitle}>
+        Join thousands of caregivers, employers and students building better careers.
       </Text>
 
-      <TextInput
-        placeholder="Full Name"
-        value={name}
-        onChangeText={setName}
-        style={{
-          borderWidth: 1,
-          marginTop: 20,
-          padding: 10,
-        }}
+      <Image
+        source={require("../assets/images/caregiver.jpg")}
+        style={styles.hero}
+        resizeMode="cover"
       />
 
       <TextInput
-        placeholder="Email"
+        placeholder="Full Name"
+        placeholderTextColor="#999"
+        value={name}
+        onChangeText={setName}
+        style={styles.input}
+      />
+
+      <TextInput
+        placeholder="Email Address"
+        placeholderTextColor="#999"
         value={email}
         onChangeText={setEmail}
-        autoCapitalize="none"
         keyboardType="email-address"
-        style={{
-          borderWidth: 1,
-          marginTop: 10,
-          padding: 10,
-        }}
+        autoCapitalize="none"
+        style={styles.input}
       />
 
       <TextInput
         placeholder="Password"
+        placeholderTextColor="#999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        style={{
-          borderWidth: 1,
-          marginTop: 10,
-          padding: 10,
-        }}
+        style={styles.input}
       />
 
-      <Text
-        style={{
-          marginTop: 20,
-          fontWeight: "bold",
-        }}
-      >
-        Select Role:
+      <Text style={styles.roleTitle}>
+        I want to join as:
       </Text>
 
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title={`Candidate ${role === "candidate" ? "✔" : ""}`}
+      <View style={styles.roleContainer}>
+        <TouchableOpacity
+          style={[
+            styles.roleButton,
+            role === "candidate" && styles.selectedRole,
+          ]}
           onPress={() => setRole("candidate")}
-        />
-      </View>
+        >
+          <Text
+            style={[
+              styles.roleText,
+              role === "candidate" && styles.selectedRoleText,
+            ]}
+          >
+            👩‍⚕️ Candidate
+          </Text>
+        </TouchableOpacity>
 
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title={`Employer ${role === "employer" ? "✔" : ""}`}
+        <TouchableOpacity
+          style={[
+            styles.roleButton,
+            role === "employer" && styles.selectedRole,
+          ]}
           onPress={() => setRole("employer")}
-        />
-      </View>
+        >
+          <Text
+            style={[
+              styles.roleText,
+              role === "employer" && styles.selectedRoleText,
+            ]}
+          >
+            🏠 Employer
+          </Text>
+        </TouchableOpacity>
 
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title={`Student ${role === "student" ? "✔" : ""}`}
+        <TouchableOpacity
+          style={[
+            styles.roleButton,
+            role === "student" && styles.selectedRole,
+          ]}
           onPress={() => setRole("student")}
-        />
+        >
+          <Text
+            style={[
+              styles.roleText,
+              role === "student" && styles.selectedRoleText,
+            ]}
+          >
+            🎓 Student
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title={`Admin ${role === "admin" ? "✔" : ""}`}
-          onPress={() => setRole("admin")}
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color="#E91E63"
+          style={{ marginTop: 25 }}
         />
-      </View>
+      ) : (
+        <>
+          <TouchableOpacity
+            style={styles.registerButton}
+            onPress={register}
+          >
+            <Text style={styles.registerText}>
+              CREATE ACCOUNT
+            </Text>
+          </TouchableOpacity>
 
-      <View style={{ marginTop: 20 }}>
-        <Button
-          title={
-            loading
-              ? "Creating account..."
-              : "Register"
-          }
-          onPress={register}
-        />
-      </View>
-
-      <View style={{ marginTop: 10 }}>
-        <Button
-          title="Back to Login"
-          onPress={() =>
-            router.replace("/login")
-          }
-        />
-      </View>
-    </View>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => router.replace("/login")}
+          >
+            <Text style={styles.loginText}>
+              Already have an account? Login
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingHorizontal: 24,
+  },
+
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: "center",
+    marginTop: 40,
+  },
+
+  title: {
+    fontSize: 30,
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#E91E63",
+  },
+
+  subtitle: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 16,
+    marginTop: 10,
+    marginBottom: 25,
+    lineHeight: 22,
+  },
+
+  hero: {
+    width: "100%",
+    height: 200,
+    borderRadius: 20,
+    marginBottom: 25,
+  },
+
+  input: {
+    backgroundColor: "#F7F7F7",
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
+
+  roleTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+    color: "#333",
+  },
+
+  roleContainer: {
+    marginBottom: 25,
+  },
+
+  roleButton: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#DDD",
+    marginBottom: 12,
+  },
+
+  selectedRole: {
+    backgroundColor: "#E91E63",
+    borderColor: "#E91E63",
+  },
+
+  roleText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    textAlign: "center",
+  },
+
+  selectedRoleText: {
+    color: "#fff",
+  },
+
+  registerButton: {
+    backgroundColor: "#E91E63",
+    padding: 18,
+    borderRadius: 15,
+    marginTop: 10,
+  },
+
+  registerText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  loginButton: {
+    marginTop: 15,
+    marginBottom: 30,
+  },
+
+  loginText: {
+    textAlign: "center",
+    color: "#E91E63",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+});

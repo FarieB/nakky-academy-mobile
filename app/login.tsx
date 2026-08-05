@@ -4,9 +4,11 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
+  Image,
+  ScrollView,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import API from "../src/services/api";
@@ -81,23 +83,75 @@ export default function LoginScreen() {
   };
 
 
-  return (
-    <View style={{ padding: 20, marginTop: 100 }}>
-      <Text style={{ fontSize: 24, fontWeight: "bold" }}>
-        Nakky Academy Login
+ return (
+  <ScrollView
+    style={{ flex: 1, backgroundColor: "#fff" }}
+    contentContainerStyle={{ paddingBottom: 40 }}
+    keyboardShouldPersistTaps="handled"
+  >
+    <Image
+      source={require("../assets/images/caregiver.jpg")}
+      style={{
+        width: "100%",
+        height: 260,
+      }}
+      resizeMode="cover"
+    />
+
+    <View
+      style={{
+        marginTop: -35,
+        backgroundColor: "#fff",
+        borderTopLeftRadius: 35,
+        borderTopRightRadius: 35,
+        padding: 25,
+      }}
+    >
+      <Image
+        source={require("../assets/images/logo.png")}
+        style={{
+          width: 90,
+          height: 90,
+          alignSelf: "center",
+        }}
+        resizeMode="contain"
+      />
+
+      <Text
+        style={{
+          fontSize: 28,
+          fontWeight: "bold",
+          textAlign: "center",
+          color: "#E91E63",
+          marginTop: 10,
+        }}
+      >
+        Welcome Back
+      </Text>
+
+      <Text
+        style={{
+          textAlign: "center",
+          color: "#777",
+          marginTop: 8,
+          marginBottom: 30,
+        }}
+      >
+        Login to continue your Nakky Academy journey
       </Text>
 
       <TextInput
-        placeholder="Email"
+        placeholder="Email Address"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
         style={{
-          borderWidth: 1,
-          marginTop: 20,
-          padding: 10,
-          borderRadius: 5,
+          backgroundColor: "#F5F5F5",
+          borderRadius: 15,
+          padding: 16,
+          marginBottom: 15,
+          fontSize: 16,
         }}
       />
 
@@ -107,27 +161,83 @@ export default function LoginScreen() {
         onChangeText={setPassword}
         secureTextEntry
         style={{
-          borderWidth: 1,
-          marginTop: 10,
-          padding: 10,
-          borderRadius: 5,
+          backgroundColor: "#F5F5F5",
+          borderRadius: 15,
+          padding: 16,
+          fontSize: 16,
         }}
       />
 
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 20 }} />
-      ) : (
-        <View style={{ marginTop: 20 }}>
-          <Button title="Login" onPress={login} />
+      <TouchableOpacity
+        style={{
+          alignSelf: "flex-end",
+          marginTop: 10,
+        }}
+      >
+        <Text
+          style={{
+            color: "#E91E63",
+            fontWeight: "600",
+          }}
+        >
+          Forgot Password?
+        </Text>
+      </TouchableOpacity>
 
-          <View style={{ marginTop: 10 }}>
-            <Button
-              title="Create Account"
-              onPress={() => router.push("/register")}
-            />
-          </View>
-        </View>
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color="#E91E63"
+          style={{ marginTop: 30 }}
+        />
+      ) : (
+        <TouchableOpacity
+          onPress={login}
+          style={{
+            backgroundColor: "#E91E63",
+            padding: 18,
+            borderRadius: 15,
+            marginTop: 25,
+          }}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              textAlign: "center",
+              fontSize: 18,
+              fontWeight: "bold",
+            }}
+          >
+            LOGIN
+          </Text>
+        </TouchableOpacity>
       )}
+
+      <TouchableOpacity
+        onPress={() => router.push("/register")}
+        style={{
+          marginTop: 25,
+        }}
+      >
+        <Text
+          style={{
+            textAlign: "center",
+            color: "#666",
+            fontSize: 16,
+          }}
+        >
+          Don't have an account?{" "}
+          <Text
+            style={{
+              color: "#E91E63",
+              fontWeight: "bold",
+            }}
+          >
+            Create Account
+          </Text>
+        </Text>
+      </TouchableOpacity>
     </View>
-  );
+  </ScrollView>
+); 
 }
