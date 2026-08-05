@@ -12,6 +12,7 @@ import {
 import DashboardButton from "../../components/DashboardButton";
 import DashboardCard from "../../components/DashboardCard";
 import DashboardHeader from "../../components/DashboardHeader";
+import LogoutButton from "../../components/LogoutButton";
 import SectionTitle from "../../components/SectionTitle";
 import API from "../../src/services/api";
 
@@ -236,6 +237,7 @@ export default function CandidateDashboard() {
       )}
 
       <View style={{ height: 40 }} />
+      <LogoutButton />
     </ScrollView>
   );
 }

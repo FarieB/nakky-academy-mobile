@@ -5,19 +5,23 @@ import { ActivityIndicator, View } from "react-native";
 
 export default function RootLayout() {
   const [loading, setLoading] = useState(true);
-  const [initialRoute, setInitialRoute] = useState("login");
+  const [initialRoute, setInitialRoute] = useState("index");
 
   useEffect(() => {
     const checkAuth = async () => {
-      const token = await AsyncStorage.getItem("token");
-
-      if (token) {
-        setInitialRoute("(tabs)");
-      } else {
-        setInitialRoute("login");
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (token) {
+          setInitialRoute("login");
+        } else {
+          setInitialRoute("index");
+        }
+      } catch (error) {
+        console.error("Authentication check failed:", error);
+        setInitialRoute("index");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     checkAuth();
@@ -32,13 +36,11 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      initialRouteName={initialRoute}
-      screenOptions={{ headerShown: false }}
-    >
+    <Stack initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />
       <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="register" /> 
     </Stack>
   );
 }
+

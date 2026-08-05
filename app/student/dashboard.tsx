@@ -16,6 +16,7 @@ import DashboardButton from "../../components/DashboardButton";
 import DashboardCard from "../../components/DashboardCard";
 import DashboardHeader from "../../components/DashboardHeader";
 import FeaturedCourse from "../../components/FeaturedCourse";
+import LogoutButton from "../../components/LogoutButton";
 import NewsCard from "../../components/NewsCard";
 import SectionTitle from "../../components/SectionTitle";
 
@@ -130,6 +131,7 @@ export default function StudentDashboard() {
         ) : (
           <>
             <CourseCard
+              key="elderly-care"
               title="Elderly Care"
               progress={75}
               lessons={24}
@@ -137,6 +139,7 @@ export default function StudentDashboard() {
             />
 
             <CourseCard
+              key="au-pair"
               title="Au Pair"
               progress={40}
               lessons={18}
@@ -144,12 +147,13 @@ export default function StudentDashboard() {
             />
 
             <CourseCard
+              key="child-care"
               title="Child Care"
               progress={15}
               lessons={30}
               onPress={() => {}}
             />
-          </>
+          </> 
         )}
       </ScrollView>
 
@@ -273,26 +277,29 @@ export default function StudentDashboard() {
         showsHorizontalScrollIndicator={false}
       >
 
-        <AchievementCard
-          emoji="🏆"
-          title="First Course"
-        />
+       <AchievementCard
+        key="ach-1"
+        emoji="🏆"
+        title="First Course"
+      />
 
-        <AchievementCard
-          emoji="⭐"
-          title="Fast Learner"
-        />
+      <AchievementCard
+        key="ach-2"
+        emoji="⭐"
+        title="Fast Learner"
+      />
 
-        <AchievementCard
-          emoji="🎖"
-          title="Verified Student"
-        />
+      <AchievementCard
+        key="ach-3"
+        emoji="🎖"
+        title="Verified Student"
+      />
 
-        <AchievementCard
-          emoji="🔥"
-          title="7 Day Streak"
-        />
-
+      <AchievementCard
+        key="ach-4"
+        emoji="🔥"
+        title="7 Day Streak"
+      /> 
       </ScrollView>
 
 
@@ -320,31 +327,32 @@ export default function StudentDashboard() {
 
       {data?.announcements?.length > 0 ? (
 
-        data?.announcements?.map((item: any) => (
-
-          <NewsCard
-            key={item._id}
-            title={item.title}
-            description={item.message}
-          />
-
-        ))
+       data.announcements.map((item:any,index:number)=>(
+   <NewsCard
+      key={item._id || index}
+      title={item.title}
+      description={item.message}
+   />
+)) 
 
       ) : (
 
         <>
-          <NewsCard
-            title="New Dementia Care Course"
-            description="Our latest professional caregiving course is now available."
-          />
+        <NewsCard
+          key="news-1"
+          title="New Dementia Care Course"
+          description="Our latest professional caregiving course is now available."
+        />
 
-          <NewsCard
-            title="New Jobs Added"
-            description="Employers have posted new caregiver opportunities near you."
-          />
-        </>
+        <NewsCard
+          key="news-2"
+          title="New Jobs Added"
+          description="Employers have posted new caregiver opportunities near you."
+        />
+      </> 
 
       )}
+      <LogoutButton />
 
     </ScrollView>
   );

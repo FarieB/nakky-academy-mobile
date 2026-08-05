@@ -12,6 +12,7 @@ import {
 import API from "../src/services/api";
 
 export default function LoginScreen() {
+  console.log("LOGIN SCREEN LOADED");
   const router = useRouter();
 
   const [email, setEmail] = useState("");
