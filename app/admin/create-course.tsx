@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -13,47 +12,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+// 1. Add the admin guard hook import
+import useAdminGuard from "../../src/hooks/useAdminGuard";
 import API from "../../src/services/api";
 
 export default function CreateCourse() {
+  // 2. Initialize the guard at the very start of the component
+  const isAdminLoading = useAdminGuard();
   const router = useRouter();
-
   const [saving, setSaving] = useState(false);
 
   // ===========================
   // Course Details
   // ===========================
-
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
   const [description, setDescription] = useState("");
-
-  const [category, setCategory] =
-    useState("Caregiving");
-
-  const [level, setLevel] =
-    useState("Beginner");
-
-  const [duration, setDuration] =
-    useState("");
-
-  const [price, setPrice] =
-    useState("");
-
-  const [passMark, setPassMark] =
-    useState("80");
-
-  const [published, setPublished] =
-    useState(false);
-
-  const [certificate, setCertificate] =
-    useState(true);
+  const [category, setCategory] = useState("Caregiving");
+  const [level, setLevel] = useState("Beginner");
+  const [duration, setDuration] = useState("");
+  const [price, setPrice] = useState("");
+  const [passMark, setPassMark] = useState("80");
+  const [published, setPublished] = useState(false);
+  const [certificate, setCertificate] = useState(true);
 
   // ===========================
   // Lessons
   // ===========================
-
   const [lessons, setLessons] = useState([
     {
       title: "",
@@ -66,7 +51,6 @@ export default function CreateCourse() {
   // ===========================
   // Add Lesson
   // ===========================
-
   const addLesson = () => {
     setLessons([
       ...lessons,
@@ -82,127 +66,46 @@ export default function CreateCourse() {
   // ===========================
   // Remove Lesson
   // ===========================
-
   const removeLesson = (index: number) => {
     if (lessons.length === 1) return;
-
     const copy = [...lessons];
-
     copy.splice(index, 1);
-
     setLessons(copy);
   };
 
-  // ===========================
+    // ===========================
   // Update Lesson
   // ===========================
-
   const updateLesson = (
     index: number,
     field: string,
     value: string
   ) => {
-    const copy: any = [...lessons];
-
-    copy[index][field] = value;
-
+    const copy = [...lessons];
+    copy[index] = {
+      ...copy[index],
+      [field]: value,
+    };
     setLessons(copy);
   };
-
- const uploadVideo = async (lessonIndex: number) => {
-    try {
-        const result =
-            await DocumentPicker.getDocumentAsync({
-                type: "video/*",
-                copyToCacheDirectory: true,
-            });
-
-        if (result.canceled) return;
-
-        const file = result.assets[0]; 
-
-        const token =
-            await AsyncStorage.getItem("token");
-
-        const form = new FormData();
-
-        form.append("video", {
-            uri: file.uri,
-            name: file.name,
-            type: "video/mp4",
-        } as any);
-
-        form.append(
-            "title",
-            lessons[lessonIndex].title
-        );
-
-        form.append(
-            "description",
-            lessons[lessonIndex].description
-        );
-
-        const response = await API.post(
-          `/courses/${courseId}/upload-video`,
-          form,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        ); 
-
-       updateLesson(
-        lessonIndex,
-        "videoUrl",
-        response.data.lesson.videoUrl
-    ); 
-
-        Alert.alert(
-            "Success",
-            "Video uploaded."
-        );
-
-    } catch (err: any) {
-        Alert.alert(
-            "Upload Failed",
-            err.response?.data?.message ||
-            err.message
-        );
-    }
-};
-
 
   // ===========================
   // Save Course
   // ===========================
-
   const saveCourse = async () => {
     if (!title.trim()) {
-      Alert.alert(
-        "Validation",
-        "Course title is required."
-      );
+      Alert.alert("Validation", "Course title is required.");
       return;
     }
-
     if (!description.trim()) {
-      Alert.alert(
-        "Validation",
-        "Course description is required."
-      );
+      Alert.alert("Validation", "Course description is required.");
       return;
     }
 
     setSaving(true);
-
     try {
-      const token =
-        await AsyncStorage.getItem("token");
-
-      API.defaults.headers.common.Authorization =
-        `Bearer ${token}`;
+      const token = await AsyncStorage.getItem("token");
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       await API.post("/courses", {
         title,
@@ -215,7 +118,6 @@ export default function CreateCourse() {
         published,
         certificate,
         passMark: Number(passMark),
-
         content: lessons.map((lesson, index) => ({
           title: lesson.title,
           description: lesson.description,
@@ -225,24 +127,23 @@ export default function CreateCourse() {
         })),
       });
 
-      Alert.alert(
-        "Success",
-        "Course created successfully."
-      );
-
+      Alert.alert("Success", "Course created successfully.");
       router.back();
     } catch (err: any) {
       console.log(err?.response?.data);
-
       Alert.alert(
         "Error",
-        err?.response?.data?.message ||
-          "Unable to create course."
+        err?.response?.data?.message || "Unable to create course."
       );
     } finally {
       setSaving(false);
     }
   };
+
+  // 3. Halt layout compilation immediately if guard is verifying authorization
+  if (isAdminLoading) {
+    return null;
+  }
 
   if (saving) {
     return (
@@ -257,14 +158,8 @@ export default function CreateCourse() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.heading}>
-        📚 Create New Course
-      </Text>
-
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <Text style={styles.heading}>📚 Create New Course</Text>
       <Text style={styles.subHeading}>
         Create professional training courses for Nakky Academy.
       </Text>
@@ -272,25 +167,19 @@ export default function CreateCourse() {
       {/* ========================= */}
       {/* BASIC INFORMATION */}
       {/* ========================= */}
-
-      <Text style={styles.section}>
-        Basic Information
-      </Text>
-
+      <Text style={styles.section}>Basic Information</Text>
       <TextInput
         style={styles.input}
         placeholder="Course Title"
         value={title}
         onChangeText={setTitle}
       />
-
       <TextInput
         style={styles.input}
         placeholder="Short Description"
         value={shortDescription}
         onChangeText={setShortDescription}
       />
-
       <TextInput
         style={[
           styles.input,
@@ -304,21 +193,18 @@ export default function CreateCourse() {
         value={description}
         onChangeText={setDescription}
       />
-
       <TextInput
         style={styles.input}
         placeholder="Category"
         value={category}
         onChangeText={setCategory}
       />
-
       <TextInput
         style={styles.input}
         placeholder="Difficulty"
         value={level}
         onChangeText={setLevel}
       />
-
       <TextInput
         style={styles.input}
         placeholder="Duration (Hours)"
@@ -326,7 +212,6 @@ export default function CreateCourse() {
         value={duration}
         onChangeText={setDuration}
       />
-
       <TextInput
         style={styles.input}
         placeholder="Course Price"
@@ -338,11 +223,7 @@ export default function CreateCourse() {
       {/* ========================= */}
       {/* COURSE SETTINGS */}
       {/* ========================= */}
-
-      <Text style={styles.section}>
-        Course Settings
-      </Text>
-
+      <Text style={styles.section}>Course Settings</Text>
       <TextInput
         style={styles.input}
         placeholder="Pass Mark (%)"
@@ -350,12 +231,8 @@ export default function CreateCourse() {
         value={passMark}
         onChangeText={setPassMark}
       />
-
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>
-          Publish Immediately
-        </Text>
-
+        <Text style={styles.switchLabel}>Publish Immediately</Text>
         <Switch
           value={published}
           onValueChange={setPublished}
@@ -365,12 +242,8 @@ export default function CreateCourse() {
           }}
         />
       </View>
-
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>
-          Issue Certificate
-        </Text>
-
+        <Text style={styles.switchLabel}>Issue Certificate</Text>
         <Switch
           value={certificate}
           onValueChange={setCertificate}
@@ -384,33 +257,16 @@ export default function CreateCourse() {
       {/* ========================= */}
       {/* LESSON BUILDER */}
       {/* ========================= */}
-
-      <Text style={styles.section}>
-        Lessons
-      </Text>
-
+      <Text style={styles.section}>Lessons</Text>
       {lessons.map((lesson, index) => (
-        <View
-          key={index}
-          style={styles.lessonCard}
-        >
-          <Text style={styles.lessonTitle}>
-            Lesson {index + 1}
-          </Text>
-
+        <View key={index} style={styles.lessonCard}>
+          <Text style={styles.lessonTitle}>Lesson {index + 1}</Text>
           <TextInput
             style={styles.input}
             placeholder="Lesson Title"
             value={lesson.title}
-            onChangeText={(text) =>
-              updateLesson(
-                index,
-                "title",
-                text
-              )
-            }
+            onChangeText={(text) => updateLesson(index, "title", text)}
           />
-
           <TextInput
             style={[
               styles.input,
@@ -423,117 +279,64 @@ export default function CreateCourse() {
             placeholder="Lesson Description"
             value={lesson.description}
             onChangeText={(text) =>
-              updateLesson(
-                index,
-                "description",
-                text
-              )
+              updateLesson(index, "description", text)
             }
           />
-
-         <TouchableOpacity
-          style={styles.uploadButton}
-          onPress={() => uploadVideo(index)}
-      >
-          <Text style={styles.uploadButtonText}>
-              {lesson.videoUrl
-                  ? "✅ Video Uploaded"
-                  : "🎥 Upload Lesson Video"}
-          </Text>
-      </TouchableOpacity>
-
-      {lesson.videoUrl ? (
-          <Text style={styles.videoName}>
-              {lesson.videoUrl}
-          </Text>
-      ) : null} 
-
+         
           <TextInput
             style={styles.input}
             placeholder="Lesson Duration (Minutes)"
             keyboardType="numeric"
             value={lesson.duration}
-            onChangeText={(text) =>
-              updateLesson(
-                index,
-                "duration",
-                text
-              )
-            }
+            onChangeText={(text) => updateLesson(index, "duration", text)}
           />
-
           {lessons.length > 1 && (
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() =>
-                removeLesson(index)
-              }
+              onPress={() => removeLesson(index)}
             >
-              <Text
-                style={styles.removeButtonText}
-              >
-                Remove Lesson
-              </Text>
+              <Text style={styles.removeButtonText}>Remove Lesson</Text>
             </TouchableOpacity>
           )}
         </View>
       ))}
-
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={addLesson}
-      >
-        <Text style={styles.addButtonText}>
-          + Add Another Lesson
-        </Text>
+      <TouchableOpacity style={styles.addButton} onPress={addLesson}>
+        <Text style={styles.addButtonText}>+ Add Another Lesson</Text>
       </TouchableOpacity>
 
       {/* ========================= */}
       {/* ACTIONS */}
       {/* ========================= */}
-
-      <TouchableOpacity
-        style={styles.saveButton}
-        onPress={saveCourse}
-      >
-        <Text style={styles.saveButtonText}>
-          Save Course
-        </Text>
+      <TouchableOpacity style={styles.saveButton} onPress={saveCourse}>
+        <Text style={styles.saveButtonText}>Save Course</Text>
       </TouchableOpacity>
-
       <TouchableOpacity
         style={styles.cancelButton}
         onPress={() => router.back()}
       >
-        <Text style={styles.cancelButtonText}>
-          Cancel
-        </Text>
+        <Text style={styles.cancelButtonText}>Cancel</Text>
       </TouchableOpacity>
-
     </ScrollView>
   );
 }
 
-  const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F7F7F7",
     padding: 20,
   },
-
   heading: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#E91E63",
     marginBottom: 6,
   },
-
   subHeading: {
     fontSize: 16,
     color: "#666",
     marginBottom: 30,
   },
-
   section: {
     fontSize: 20,
     fontWeight: "700",
@@ -541,7 +344,6 @@ export default function CreateCourse() {
     marginBottom: 15,
     marginTop: 10,
   },
-
   input: {
     backgroundColor: "#FFF",
     borderWidth: 1,
@@ -552,7 +354,6 @@ export default function CreateCourse() {
     marginBottom: 15,
     fontSize: 16,
   },
-
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -563,13 +364,11 @@ export default function CreateCourse() {
     paddingVertical: 14,
     marginBottom: 15,
   },
-
   switchLabel: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
   },
-
   lessonCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -577,7 +376,6 @@ export default function CreateCourse() {
     marginBottom: 20,
     borderWidth: 1,
     borderColor: "#ECECEC",
-
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 5,
@@ -585,17 +383,31 @@ export default function CreateCourse() {
       width: 0,
       height: 2,
     },
-
     elevation: 2,
   },
-
   lessonTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#E91E63",
     marginBottom: 15,
   },
-
+  uploadButton: {
+    backgroundColor: "#E91E63",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  uploadButtonText: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  videoName: {
+    fontSize: 13,
+    color: "#4CAF50",
+    marginBottom: 15,
+  },
   addButton: {
     backgroundColor: "#E91E63",
     paddingVertical: 15,
@@ -603,13 +415,11 @@ export default function CreateCourse() {
     alignItems: "center",
     marginBottom: 25,
   },
-
   addButtonText: {
     color: "#FFF",
     fontWeight: "700",
     fontSize: 16,
   },
-
   removeButton: {
     marginTop: 10,
     backgroundColor: "#D32F2F",
@@ -617,13 +427,11 @@ export default function CreateCourse() {
     borderRadius: 10,
     alignItems: "center",
   },
-
   removeButtonText: {
     color: "#FFF",
     fontWeight: "700",
     fontSize: 15,
   },
-
   saveButton: {
     backgroundColor: "#E91E63",
     paddingVertical: 18,
@@ -631,13 +439,11 @@ export default function CreateCourse() {
     alignItems: "center",
     marginBottom: 15,
   },
-
   saveButtonText: {
     color: "#FFF",
     fontSize: 18,
     fontWeight: "bold",
   },
-
   cancelButton: {
     backgroundColor: "#757575",
     paddingVertical: 18,
@@ -645,10 +451,10 @@ export default function CreateCourse() {
     alignItems: "center",
     marginBottom: 40,
   },
-
   cancelButtonText: {
     color: "#FFF",
     fontSize: 18,
     fontWeight: "bold",
   },
+  
 });

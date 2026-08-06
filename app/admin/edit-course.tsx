@@ -14,9 +14,14 @@ import {
   View,
 } from "react-native";
 
+// 1. Add the admin guard hook import
+import useAdminGuard from "../../src/hooks/useAdminGuard";
 import API from "../../src/services/api";
 
 export default function EditCourse() {
+  // 2. Initialize the guard at the very start of the component
+  const isAdminLoading = useAdminGuard();
+
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -53,7 +58,7 @@ export default function EditCourse() {
     useState(true);
 
   // ===========================
-  // LESSONS
+  // LESSONs
   // ===========================
 
   const [lessons, setLessons] = useState<any[]>([]);
@@ -63,8 +68,11 @@ export default function EditCourse() {
   // ===========================
 
   useEffect(() => {
+    // Prevent loading data from your backend if user isn't authenticated yet
+    if (isAdminLoading) return;
+
     loadCourse();
-  }, []);
+  }, [isAdminLoading]); // Added security dependency here
 
   const loadCourse = async () => {
     try {
@@ -173,6 +181,9 @@ export default function EditCourse() {
 
  const uploadVideo = async (lessonIndex: number) => {
     try {
+        // Halt media operations if authentication is not validated
+        if (isAdminLoading) return;
+
         const result =
             await DocumentPicker.getDocumentAsync({
                 type: "video/*",
@@ -310,8 +321,13 @@ export default function EditCourse() {
   };
 
   // ===========================
-  // LOADING
+  // LOADING & SECURITY INTERCEPT
   // ===========================
+
+  // 3. Halt compilation and return null immediately if security guard is evaluating
+  if (isAdminLoading) {
+    return null;
+  }
 
   if (loading || saving) {
     return (
@@ -324,6 +340,7 @@ export default function EditCourse() {
       />
     );
   }
+
 
     return (
     <ScrollView
@@ -738,5 +755,25 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  uploadButton: {
+  backgroundColor: "#E91E63",
+  paddingVertical: 14,
+  borderRadius: 12,
+  alignItems: "center",
+  marginTop: 12,
+  },
+
+  uploadButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+
+  videoName: {
+    marginTop: 10,
+    color: "#666",
+    fontSize: 14,
+    fontStyle: "italic",
   },
 });

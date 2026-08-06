@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import ImageCarousel from "../components/ImageCarousel";
 import API from "../src/services/api";
 
 export default function RegisterScreen() {
@@ -81,11 +81,9 @@ export default function RegisterScreen() {
         Join thousands of caregivers, employers and students building better careers.
       </Text>
 
-      <Image
-        source={require("../assets/images/caregiver.jpg")}
-        style={styles.hero}
-        resizeMode="cover"
-      />
+      <View style={styles.carouselSpacer}>
+          <ImageCarousel />
+      </View> 
 
       <TextInput
         placeholder="Full Name"
@@ -232,12 +230,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  hero: {
-    width: "100%",
-    height: 200,
-    borderRadius: 20,
+  carouselSpacer: {
     marginBottom: 25,
-  },
+  }, 
 
   input: {
     backgroundColor: "#F7F7F7",

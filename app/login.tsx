@@ -5,12 +5,15 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import ImageCarousel from "../components/ImageCarousel";
 import API from "../src/services/api";
 
 export default function LoginScreen() {
@@ -84,19 +87,18 @@ export default function LoginScreen() {
 
 
  return (
-  <ScrollView
-    style={{ flex: 1, backgroundColor: "#fff" }}
-    contentContainerStyle={{ paddingBottom: 40 }}
-    keyboardShouldPersistTaps="handled"
+ <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={20}
   >
-    <Image
-      source={require("../assets/images/caregiver.jpg")}
-      style={{
-        width: "100%",
-        height: 260,
-      }}
-      resizeMode="cover"
-    />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: "#fff" }}
+      contentContainerStyle={{ paddingBottom: 60 }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    > 
+    <ImageCarousel />
 
     <View
       style={{
@@ -239,5 +241,6 @@ export default function LoginScreen() {
       </TouchableOpacity>
     </View>
   </ScrollView>
+  </KeyboardAvoidingView>
 ); 
 }

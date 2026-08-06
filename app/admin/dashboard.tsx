@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import useAdminGuard from "../../src/hooks/useAdminGuard";
 import API from "../../src/services/api";
 import { getSocket } from "../../src/socket/socket";
 
@@ -20,6 +21,9 @@ import LogoutButton from "../../components/LogoutButton";
 import SectionTitle from "../../components/SectionTitle";
 
 export default function AdminDashboard() {
+  // 1. Run the admin security guard first
+  const isAdminLoading = useAdminGuard();
+
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -53,6 +57,9 @@ export default function AdminDashboard() {
   // Real-time Dashboard Socket Listener
   // ==========================================
   useEffect(() => {
+    // If the admin guard is still determining security authorization, skip fetching
+    if (isAdminLoading) return;
+
     loadDashboard();
 
     const socket = getSocket();
@@ -69,8 +76,14 @@ export default function AdminDashboard() {
     return () => {
       socket.off("admin_dashboard_update");
     };
-  }, []);
+  }, [isAdminLoading]); // Added dependency to re-run once security checks pass
 
+  // 2. Block the UI entirely if the security check is active
+  if (isAdminLoading) {
+    return null;
+  }
+
+  // 3. Fallback to data loading spinner once security authorization passes
   if (loading) {
     return (
       <ActivityIndicator
@@ -313,6 +326,7 @@ export default function AdminDashboard() {
     </ScrollView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

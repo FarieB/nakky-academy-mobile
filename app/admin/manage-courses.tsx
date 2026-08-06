@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 
+// 1. Add the admin guard hook import
+import useAdminGuard from "../../src/hooks/useAdminGuard";
 import API from "../../src/services/api";
 
 // Define TypeScript interfaces for better type safety
@@ -29,14 +31,20 @@ interface Course {
 }
 
 export default function ManageCourses() {
+  // 2. Initialize the guard at the very start of the component
+  const isAdminLoading = useAdminGuard();
+
   const router = useRouter();
   const [loading, setLoading] = useState<boolean>(true);
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState<string>("");
 
   useEffect(() => {
+    // Prevent fetching courses from your backend if user isn't verified yet
+    if (isAdminLoading) return;
+
     loadCourses();
-  }, []);
+  }, [isAdminLoading]); // Re-run hook once authorization completes
 
   const loadCourses = async () => {
     try {
@@ -112,6 +120,12 @@ export default function ManageCourses() {
     course.title?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // 3. Halt layout compilation completely if guard is verifying authorization
+  if (isAdminLoading) {
+    return null;
+  }
+
+  // 4. Regular data loading fallback layout
   if (loading) {
     return (
       <ActivityIndicator
@@ -288,3 +302,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
+
