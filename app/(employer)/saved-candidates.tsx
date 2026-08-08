@@ -26,7 +26,7 @@ export default function SavedCandidates() {
       setLoading(true);
       const token = await AsyncStorage.getItem("token");
       API.defaults.headers.common.Authorization = `Bearer ${token}`;
-      const response = await API.get("/profile/saved-candidates");
+      const response = await API.get("/profiles/saved-candidates");
       setCandidates(response.data);
     } catch (err: any) {
       Alert.alert(
@@ -51,7 +51,7 @@ export default function SavedCandidates() {
     try {
       const token = await AsyncStorage.getItem("token");
       API.defaults.headers.common.Authorization = `Bearer ${token}`;
-      await API.delete(`/profile/saved-candidate/${candidateId}`);
+      await API.delete(`/profiles/candidate/${candidateId}/save`);
       setCandidates((prev) =>
         prev.filter((item) => item.candidate._id !== candidateId)
       );
@@ -173,14 +173,14 @@ export default function SavedCandidates() {
 
             <TouchableOpacity
               style={styles.contactButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/(employer)/contact-candidate",
-                  params: {
-                    id: candidate._id,
-                  },
-                })
-              }
+             onPress={() =>
+              router.push({
+                pathname: "/(employer)/candidate-details",
+                params: {
+                  id: candidate._id,
+                },
+              })
+            } 
             >
               <Text style={styles.contactButtonText}>Contact Candidate</Text>
             </TouchableOpacity>

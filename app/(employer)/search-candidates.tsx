@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,7 +9,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,49 +17,75 @@ import API from "../../src/services/api";
 export default function SearchCandidates() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-
-  // ===========================
-  // SEARCH RESULTS
-  // ===========================
   const [candidates, setCandidates] = useState<any[]>([]);
 
-  // ===========================
-  // BASIC FILTERS
-  // ===========================
+  // ==========================================
+  // FILTERS
+  // ==========================================
   const [workerType, setWorkerType] = useState("");
   const [province, setProvince] = useState("");
-  const [city, setCity] = useState("");
-
-  // ===========================
-  // EMPLOYMENT
-  // ===========================
-  const [workPreference, setWorkPreference] = useState("");
-  const [availabilityStatus, setAvailabilityStatus] = useState("");
-
-  // ===========================
-  // EXPERIENCE
-  // ===========================
-  const [minExperience, setMinExperience] = useState("");
-  const [maxExperience, setMaxExperience] = useState("");
-
-  // ===========================
-  // PERSONAL
-  // ===========================
+  const [employment, setEmployment] = useState("");
   const [gender, setGender] = useState("");
-  const [nationality, setNationality] = useState("");
   const [language, setLanguage] = useState("");
-  const [minAge, setMinAge] = useState("");
-  const [maxAge, setMaxAge] = useState("");
-
-  // ===========================
-  // OTHER
-  // ===========================
   const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [keyword, setKeyword] = useState("");
 
-  // ===========================
-  // SEARCH CANDIDATES
-  // ===========================
+  // ==========================================
+  // OPTIONS
+  // ==========================================
+  const workerTypes = [
+    "Caregiver",
+    "Nanny",
+    "Babysitter",
+    "Domestic Helper",
+    "Gardener",
+    "Housekeeper",
+    "Cook",
+    "Driver",
+    "Au Pair",
+    "Disability Care",
+    "Elderly Care",
+  ];
+
+  const provinces = [
+    "Eastern Cape",
+    "Free State",
+    "Gauteng",
+    "KwaZulu-Natal",
+    "Limpopo",
+    "Mpumalanga",
+    "Northern Cape",
+    "North West",
+    "Western Cape",
+  ];
+
+  const employmentOptions = [
+    "Full Time",
+    "Part Time",
+    "Live In",
+    "Live Out",
+    "Day Shift",
+    "Night Shift",
+    "Temporary",
+    "Weekends",
+  ];
+
+  const languages = [
+    "English",
+    "Zulu",
+    "Xhosa",
+    "Xitsonga",
+    "Venda",
+    "Tswana",
+    "Sotho",
+    "Sepedi",
+    "Swati",
+    "Ndebele",
+    "Shona",
+  ];
+
+  // ==========================================
+  // SEARCH
+  // ==========================================
   const searchCandidates = async () => {
     try {
       setLoading(true);
@@ -69,27 +95,15 @@ export default function SearchCandidates() {
       const params = new URLSearchParams();
       if (workerType) params.append("workerType", workerType);
       if (province) params.append("province", province);
-      if (city) params.append("city", city);
-      if (workPreference)
-        params.append("workPreference", workPreference);
-      if (availabilityStatus)
-        params.append("availabilityStatus", availabilityStatus);
-      if (minExperience)
-        params.append("minExperience", minExperience);
-      if (maxExperience)
-        params.append("maxExperience", maxExperience);
+      if (employment) params.append("employment", employment);
       if (gender) params.append("gender", gender);
-      if (nationality) params.append("nationality", nationality);
       if (language) params.append("language", language);
-      if (minAge) params.append("minAge", minAge);
-      if (maxAge) params.append("maxAge", maxAge);
-      if (verifiedOnly) params.append("verified", "true");
-      if (keyword) params.append("keyword", keyword);
+      if (verifiedOnly) {
+        params.append("verified", "true");
+      }
 
-      const response = await API.get(
-        `/profile/search?${params.toString()}`
-      );
-      setCandidates(response.data);
+      const res = await API.get(`/profiles/search?${params.toString()}`);
+      setCandidates(res.data);
     } catch (err: any) {
       console.log(err?.response?.data);
       Alert.alert(
@@ -101,253 +115,168 @@ export default function SearchCandidates() {
     }
   };
 
+  // ==========================================================
+  // UI
+  // ==========================================================
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.heading}>Find Your Perfect Candidate</Text>
+      <Text style={styles.heading}>Search Candidates</Text>
       <Text style={styles.subHeading}>
-        Search verified candidates using multiple filters.
+        Find the perfect candidate for your family or business.
       </Text>
 
-      {/* ========================= */}
-      {/* KEYWORD */}
-      {/* ========================= */}
-      <Text style={styles.section}>Search</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Name, skill or keyword"
-        value={keyword}
-        onChangeText={setKeyword}
-      />
-
-      {/* ========================= */}
+      {/* ======================================= */}
       {/* WORKER TYPE */}
-      {/* ========================= */}
-      <Text style={styles.section}>Worker Type</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Caregiver, Nanny, Helper..."
-        value={workerType}
-        onChangeText={setWorkerType}
-      />
-
-      {/* ========================= */}
-      {/* LOCATION */}
-      {/* ========================= */}
-      <Text style={styles.section}>Location</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Province"
-        value={province}
-        onChangeText={setProvince}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="City / Town"
-        value={city}
-        onChangeText={setCity}
-      />
-
-      {/* ========================= */}
-      {/* EMPLOYMENT */}
-      {/* ========================= */}
-      <Text style={styles.section}>Employment</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Full-time / Part-time / Live-in / Live-out"
-        value={workPreference}
-        onChangeText={setWorkPreference}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Day Shift / Night Shift / Available Now"
-        value={availabilityStatus}
-        onChangeText={setAvailabilityStatus}
-      />
-
-      {/* ========================= */}
-      {/* EXPERIENCE */}
-      {/* ========================= */}
-      <Text style={styles.section}>Experience</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Minimum Years"
-        keyboardType="numeric"
-        value={minExperience}
-        onChangeText={setMinExperience}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Maximum Years"
-        keyboardType="numeric"
-        value={maxExperience}
-        onChangeText={setMaxExperience}
-      />
-
-      {/* ========================= */}
-      {/* PERSONAL */}
-      {/* ========================= */}
-      <Text style={styles.section}>Personal Details</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Gender"
-        value={gender}
-        onChangeText={setGender}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Nationality"
-        value={nationality}
-        onChangeText={setNationality}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Language"
-        value={language}
-        onChangeText={setLanguage}
-      />
-
-      {/* ========================= */}
-      {/* AGE */}
-      {/* ========================= */}
-      <Text style={styles.section}>Age</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Minimum Age"
-        keyboardType="numeric"
-        value={minAge}
-        onChangeText={setMinAge}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Maximum Age"
-        keyboardType="numeric"
-        value={maxAge}
-        onChangeText={setMaxAge}
-      />
-
-      {/* ========================= */}
-      {/* VERIFIED */}
-      {/* ========================= */}
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Verified Candidates Only</Text>
-        <Switch
-          value={verifiedOnly}
-          onValueChange={setVerifiedOnly}
-          trackColor={{
-            false: "#CCC",
-            true: "#4CAF50",
-          }}
-        />
+      {/* ======================================= */}
+      <Text style={styles.label}>Worker Type</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={workerType}
+          onValueChange={(itemValue) => setWorkerType(itemValue)}
+        >
+          <Picker.Item label="Any Worker Type" value="" />
+          {workerTypes.map((item) => (
+            <Picker.Item key={item} label={item} value={item} />
+          ))}
+        </Picker>
       </View>
 
-      {/* ========================= */}
+      {/* ======================================= */}
+      {/* PROVINCE */}
+      {/* ======================================= */}
+      <Text style={styles.label}>Province</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={province}
+          onValueChange={(itemValue) => setProvince(itemValue)}
+        >
+          <Picker.Item label="Any Province" value="" />
+          {provinces.map((item) => (
+            <Picker.Item key={item} label={item} value={item} />
+          ))}
+        </Picker>
+      </View>
+
+      {/* ======================================= */}
+      {/* EMPLOYMENT */}
+      {/* ======================================= */}
+      <Text style={styles.label}>Employment Preference</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={employment}
+          onValueChange={(itemValue) => setEmployment(itemValue)}
+        >
+          <Picker.Item label="Any Employment" value="" />
+          {employmentOptions.map((item) => (
+            <Picker.Item key={item} label={item} value={item} />
+          ))}
+        </Picker>
+      </View>
+
+      {/* ======================================= */}
+      {/* GENDER */}
+      {/* ======================================= */}
+      <Text style={styles.label}>Gender</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={gender}
+          onValueChange={(itemValue) => setGender(itemValue)}
+        >
+          <Picker.Item label="Any Gender" value="" />
+          <Picker.Item label="Male" value="Male" />
+          <Picker.Item label="Female" value="Female" />
+        </Picker>
+      </View>
+
+      {/* ======================================= */}
+      {/* LANGUAGE */}
+      {/* ======================================= */}
+      <Text style={styles.label}>Language</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={language}
+          onValueChange={(itemValue) => setLanguage(itemValue)}
+        >
+          <Picker.Item label="Any Language" value="" />
+          {languages.map((item) => (
+            <Picker.Item key={item} label={item} value={item} />
+          ))}
+        </Picker>
+      </View>
+
+      {/* ======================================= */}
+      {/* VERIFIED */}
+      {/* ======================================= */}
+      <View style={styles.switchRow}>
+        <Text style={styles.switchText}>Verified Candidates Only</Text>
+        <Switch value={verifiedOnly} onValueChange={setVerifiedOnly} />
+      </View>
+
+      {/* ======================================= */}
       {/* SEARCH BUTTON */}
-      {/* ========================= */}
+      {/* ======================================= */}
       <TouchableOpacity
         style={styles.searchButton}
         onPress={searchCandidates}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.searchButtonText}>🔍 Search Candidates</Text>
+          <Text style={styles.searchButtonText}>Search Candidates</Text>
         )}
       </TouchableOpacity>
 
-      {/* ========================= */}
-      {/* SEARCH RESULTS */}
-      {/* ========================= */}
-      {candidates.length > 0 && (
-        <>
-          <Text style={styles.section}>
-            Candidates Found ({candidates.length})
+      {/* ======================================= */}
+      {/* RESULTS */}
+      {/* ======================================= */}
+      {candidates.map((candidate: any) => (
+        <View key={candidate._id} style={styles.card}>
+          <Text style={styles.name}>
+             {candidate.firstName || "Candidate"}
           </Text>
-          {candidates.map((candidate: any) => (
-            <View key={candidate._id} style={styles.candidateCard}>
-              {/* Photo */}
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {candidate.firstName ? candidate.firstName.charAt(0) : "?"}
-                </Text>
-              </View>
+          <Text style={styles.detail}>
+            💼 {candidate.workerTypes?.join(", ")}
+          </Text>
+          <Text style={styles.detail}>
+            📍 {candidate.city}, {candidate.province}
+          </Text>
+          <Text style={styles.detail}>
+            ⭐ {candidate.yearsExperience} Years Experience
+          </Text>
+          <Text style={styles.detail}>
+            🌍 {candidate.languages?.join(", ")}
+          </Text>
+          <Text style={styles.detail}>
+            💰 Expected Salary: R{candidate.expectedSalary}
+          </Text>
+          <Text style={styles.detail}>
+            🟢 {candidate.availabilityStatus}
+          </Text>
+          {candidate.profileVerified && (
+            <Text style={styles.verified}>✔ Verified Candidate</Text>
+          )}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() =>
+              router.push({
+                pathname: "/(employer)/candidate-details",
+                params: {
+                  id: candidate._id,
+                },
+              })
+            }
+          >
+            <Text style={styles.profileButtonText}>View Profile</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
 
-              {/* Candidate Name */}
-              <Text style={styles.candidateName}>{candidate.firstName}</Text>
-
-              {/* Verification */}
-              {candidate.verifiedBadge && (
-                <Text style={styles.verified}>✅ Verified Candidate</Text>
-              )}
-
-              {/* Worker Type */}
-              <Text style={styles.detail}>
-                💼 {candidate.workerTypes?.join(", ")}
-              </Text>
-
-              {/* Location */}
-              <Text style={styles.detail}>
-                📍 {candidate.city}, {candidate.province}
-              </Text>
-
-              {/* Experience */}
-              <Text style={styles.detail}>
-                ⭐ {candidate.yearsExperience} Years Experience
-              </Text>
-
-              {/* Employment */}
-              <Text style={styles.detail}>
-                🏠 {candidate.workPreference}
-              </Text>
-
-              {/* Availability */}
-              <Text style={styles.detail}>
-                🕒 {candidate.availabilityStatus}
-              </Text>
-
-              {/* Languages */}
-              <Text style={styles.detail}>
-                🌍 {candidate.languages?.join(", ")}
-              </Text>
-
-              {/* Salary */}
-              <Text style={styles.detail}>
-                💰 R{candidate.expectedSalary}/month
-              </Text>
-
-              {/* Buttons */}
-              <TouchableOpacity
-                style={styles.profileButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(employer)/candidate-details",
-                    params: {
-                      id: candidate._id,
-                    },
-                  })
-                }
-              >
-                <Text style={styles.profileButtonText}>View Profile</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={() => {
-                  // We'll implement Saved Candidates later
-                }}
-              >
-                <Text style={styles.saveButtonText}>❤ Save Candidate</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </>
-      )}
-
-      {candidates.length === 0 && !loading && (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No Candidates Yet</Text>
+      {!loading && candidates.length === 0 && (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No Candidates Found</Text>
           <Text style={styles.emptyText}>
-            Adjust your filters and search again.
+            Try changing your search filters.
           </Text>
         </View>
       )}
@@ -358,151 +287,115 @@ export default function SearchCandidates() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F7F7",
-    padding: 20,
+    backgroundColor: "#F6F8FA",
+    padding: 18,
   },
   heading: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "bold",
     color: "#2E7D32",
-    marginBottom: 6,
+    marginTop: 10,
   },
   subHeading: {
     fontSize: 16,
     color: "#666",
-    marginBottom: 30,
+    marginBottom: 25,
+    marginTop: 5,
   },
-  section: {
-    fontSize: 20,
+  label: {
+    fontSize: 16,
     fontWeight: "700",
-    color: "#222",
+    color: "#333",
+    marginBottom: 8,
     marginTop: 12,
-    marginBottom: 15,
   },
-  input: {
+  pickerContainer: {
     backgroundColor: "#FFF",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#DDD",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
     marginBottom: 15,
-    fontSize: 16,
+    overflow: "hidden",
   },
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#FFF",
+    padding: 15,
     borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
+    marginTop: 10,
     marginBottom: 20,
   },
-  switchLabel: {
+  switchText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
   },
   searchButton: {
     backgroundColor: "#2E7D32",
-    paddingVertical: 18,
-    borderRadius: 14,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 25,
     elevation: 3,
   },
   searchButtonText: {
     color: "#FFF",
     fontWeight: "bold",
-    fontSize: 18,
+    fontSize: 17,
   },
-  candidateCard: {
+  card: {
     backgroundColor: "#FFF",
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 18,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#EAEAEA",
+    marginBottom: 18,
+    elevation: 2,
     shadowColor: "#000",
     shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowRadius: 4,
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    elevation: 3,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#E8F5E9",
-    alignSelf: "center",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#2E7D32",
-  },
-  profileImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    alignSelf: "center",
-    marginBottom: 15,
-  },
-  candidateName: {
+  name: {
     fontSize: 22,
     fontWeight: "bold",
-    textAlign: "center",
     color: "#222",
-    marginBottom: 8,
-  },
-  verified: {
-    textAlign: "center",
-    color: "#2E7D32",
-    fontWeight: "700",
-    marginBottom: 14,
+    marginBottom: 12,
   },
   detail: {
     fontSize: 15,
     color: "#555",
-    marginBottom: 8,
+    marginBottom: 7,
+    lineHeight: 22,
+  },
+  verified: {
+    color: "#2E7D32",
+    fontWeight: "bold",
+    marginTop: 10,
+    marginBottom: 12,
+    fontSize: 15,
   },
   profileButton: {
     backgroundColor: "#2E7D32",
-    borderRadius: 12,
     paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
-    marginTop: 15,
+    marginTop: 10,
   },
   profileButtonText: {
     color: "#FFF",
     fontWeight: "bold",
     fontSize: 16,
   },
-  saveButton: {
-    backgroundColor: "#43A047",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 12,
-  },
-  saveButtonText: {
-    color: "#FFF",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  emptyContainer: {
+  emptyCard: {
     backgroundColor: "#FFF",
-    borderRadius: 16,
     padding: 35,
+    borderRadius: 16,
     alignItems: "center",
-    marginTop: 25,
+    marginTop: 20,
   },
   emptyTitle: {
     fontSize: 22,
@@ -511,8 +404,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   emptyText: {
+    fontSize: 15,
     color: "#777",
     textAlign: "center",
-    fontSize: 15,
   },
 });

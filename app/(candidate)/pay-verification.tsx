@@ -39,9 +39,9 @@ export default function PayVerificationScreen() {
       // ==========================
       // UPDATED ENDPOINT
       // ==========================
-      const res = await API.post(
-        "payment/verification"
-      );
+      const res =await API.post(
+        "/payments/verification"
+    ); 
 
       setPaymentUrl(res.data.paymentUrl);
     } catch (err: any) {
@@ -109,25 +109,25 @@ export default function PayVerificationScreen() {
         // ======================
         // SUCCESS
         // ======================
-        if (url.includes("payment-success")) {
-          Alert.alert(
-            "Success",
-            "Verification payment successful"
-          );
+      if (url.startsWith("nakkyacademymobile://payment-success")) {
+        Alert.alert(
+          "Success",
+          "Verification payment successful."
+        );
 
-         router.replace("/candidate/dashboard" as any); 
-        }
+        router.replace("/(candidate)/candidate-dashboard");
+      } 
 
         // ======================
         // CANCELLED
         // ======================
-        if (url.includes("payment-cancel")) {
+        if (url.startsWith("nakkyacademymobile://payment-cancel")) {
           Alert.alert(
             "Cancelled",
-            "Payment cancelled"
+            "Payment cancelled."
           );
 
-          router.back();
+          router.replace("/(candidate)/candidate-dashboard");
         }
       }}
     />

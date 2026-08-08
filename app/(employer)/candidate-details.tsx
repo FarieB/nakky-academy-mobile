@@ -45,7 +45,7 @@ export default function CandidateDetails() {
         `Bearer ${token}`;
 
       const response = await API.get(
-        `/profile/candidate/${id}`
+        `/profiles/candidate/${id}`
       );
 
       setCandidate(response.data);
@@ -83,19 +83,25 @@ export default function CandidateDetails() {
     }
   };
 
-  const saveCandidate = async () => {
+const saveCandidate = async () => {
   try {
-    const token =
-      await AsyncStorage.getItem("token");
+    const token = await AsyncStorage.getItem("token");
+
+    if (!token) {
+      Alert.alert("Error", "You are not logged in.");
+      return;
+    }
+
+    if (!candidate?._id) {
+      Alert.alert("Error", "Candidate ID is missing.");
+      return;
+    }
 
     API.defaults.headers.common.Authorization =
       `Bearer ${token}`;
 
     await API.post(
-      "/profile/save-candidate",
-      {
-        candidateId: candidate._id,
-      }
+      `/profiles/candidate/${candidate._id}/save`
     );
 
     setSaved(true);
@@ -106,11 +112,12 @@ export default function CandidateDetails() {
     );
 
   } catch (err: any) {
+    console.log(
+      "SAVE CANDIDATE ERROR:",
+      err?.response?.data || err.message
+    );
 
-    if (
-      err?.response?.status === 400
-    ) {
-
+    if (err?.response?.status === 400) {
       setSaved(true);
 
       Alert.alert(
@@ -241,7 +248,8 @@ export default function CandidateDetails() {
       </Text>
 
       <Text style={styles.text}>
-        {candidate.workPreference}
+        {candidate.workPreferences?.join(", ") ||
+          "Not specified"}
       </Text>
 
       <Text style={styles.text}>
@@ -310,13 +318,50 @@ export default function CandidateDetails() {
 
       {candidate.qualifications?.length ? (
         candidate.qualifications.map(
-          (item: string, index: number) => (
-            <Text
-              key={index}
-              style={styles.text}
+          (item: any, index: number) => (
+            <View
+              key={item._id || index}
+              style={{
+                marginBottom: 15,
+                paddingBottom: 15,
+                borderBottomWidth:
+                  index <
+                  candidate.qualifications.length - 1
+                    ? 1
+                    : 0,
+                borderBottomColor: "#E0E0E0",
+              }}
             >
-              • {item}
-            </Text>
+              <Text style={styles.text}>
+                🎓 {item.title || "Qualification"}
+              </Text>
+
+              {item.institution && (
+                <Text style={styles.text}>
+                  Institution: {item.institution}
+                </Text>
+              )}
+
+              {item.yearCompleted && (
+                <Text style={styles.text}>
+                  Year Completed: {item.yearCompleted}
+                </Text>
+              )}
+
+              {item.certificateFile && (
+                <Text
+                  style={[
+                    styles.text,
+                    {
+                      color: "#2E7D32",
+                      fontWeight: "600",
+                    },
+                  ]}
+                >
+                  📄 Certificate available
+                </Text>
+              )}
+            </View>
           )
         )
       ) : (
@@ -381,14 +426,18 @@ export default function CandidateDetails() {
     {subscriptionActive ? (
       <TouchableOpacity
         style={styles.contactButton}
-        onPress={() =>
-          router.push({
-            pathname: "/messaging/" + candidate._id,
-            params: {
-              name: candidate.firstName || candidate.name || "Candidate",
-            },
-          })
-        }
+       onPress={() =>
+        router.push({
+          pathname: "/messaging/[userId]",
+          params: {
+            userId: candidate.user?._id || candidate.user,
+            name:
+              candidate.firstName ||
+              candidate.name ||
+              "Candidate",
+          },
+        })
+      } 
       >
         <Text style={styles.contactButtonText}>
           💬 Message Candidate
@@ -565,6 +614,15 @@ const styles = StyleSheet.create({
 
   saveButton: {
    backgroundColor: "#9E9E9E", 
+    marginHorizontal: 18,
+    marginTop: 15,
+    paddingVertical: 18,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+    savedButton: {
+    backgroundColor: "#2E7D32",
     marginHorizontal: 18,
     marginTop: 15,
     paddingVertical: 18,
