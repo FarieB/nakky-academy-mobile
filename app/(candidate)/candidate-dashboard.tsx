@@ -166,7 +166,7 @@ export default function CandidateDashboard() {
         <DashboardButton
           title="💳 Pay Verification"
           onPress={() =>
-            router.push("/pay-verification")
+            router.push("/(candidate)/verification-info")
           }
         />
 
@@ -384,7 +384,7 @@ export default function CandidateDashboard() {
       <DashboardButton
         title="💳 Pay Verification"
         onPress={() =>
-          router.push("/pay-verification")
+          router.push("/(candidate)/verification-info")
         }
       />
 

@@ -30,7 +30,7 @@ export default function SubscribeScreen() {
   // ==========================
   const fetchPlans = async () => {
     try {
-      const res = await API.get("/subscription/plans");
+      const res = await API.get("/subscriptions/plans");
 
       setPlans(res.data);
     } catch (err: any) {
@@ -67,8 +67,11 @@ export default function SubscribeScreen() {
       // ======================
       // PAYFAST ENDPOINT
       // ======================
-      const res = await API.post(
-        `/payments/subscription/${planId}`
+     const res = await API.post(
+        "/payments/subscription",
+        {
+          planId,
+        }
       );
 
       setPaymentUrl(res.data.paymentUrl);
@@ -176,8 +179,9 @@ export default function SubscribeScreen() {
               R{plan.price}
             </Text>
 
-            <Text style={styles.duration}>
-              {plan.durationDays} days
+            <Text style={styles.subtitle}>
+              Subscribe for R100 per month to contact candidates
+              and access candidate contact details.
             </Text>
 
             {plan.description ? (
