@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 
 import {
@@ -18,29 +18,28 @@ import API from "../../src/services/api";
 
 
 interface PaymentDetails {
-
   paymentId: string;
-
-  accountName: string;
-
-  bankName: string;
-
-  accountNumber: string;
-
-  branchCode: string;
-
-  accountType: string;
-
-  paymentReference: string;
+  courseId: string;
+  courseTitle: string;
 
   amount: number;
 
+  paymentReference: string;
+
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  branchCode: string;
+  accountType: string;
 }
 
 
-export default function PayVerificationScreen() {
+export default function PayCourseScreen() {
 
   const router = useRouter();
+
+  const { courseId } =
+    useLocalSearchParams();
 
 
   const [loading, setLoading] =
@@ -71,7 +70,7 @@ export default function PayVerificationScreen() {
 
     }
 
-    catch (error) {
+    catch {
 
       Alert.alert(
         "Error",
@@ -84,10 +83,10 @@ export default function PayVerificationScreen() {
 
 
   // ==========================================
-  // CREATE VERIFICATION PAYMENT
+  // CREATE COURSE PAYMENT
   // ==========================================
 
-  const createVerificationPayment =
+  const createCoursePayment =
     async () => {
 
       try {
@@ -113,6 +112,20 @@ export default function PayVerificationScreen() {
         }
 
 
+        if (!courseId) {
+
+          Alert.alert(
+            "Error",
+            "Course information is missing."
+          );
+
+          router.back();
+
+          return;
+
+        }
+
+
         API.defaults.headers.common[
           "Authorization"
         ] =
@@ -121,19 +134,18 @@ export default function PayVerificationScreen() {
 
         const res =
           await API.post(
-            "/payments/verification"
+            "/payments/course",
+            {
+              courseId
+            }
           );
 
 
         console.log(
-          "VERIFICATION PAYMENT RESPONSE:",
+          "COURSE PAYMENT RESPONSE:",
           res.data
         );
 
-
-        // ====================================
-        // EXTRACT RESPONSE
-        // ====================================
 
         const payment =
           res.data?.payment;
@@ -143,22 +155,36 @@ export default function PayVerificationScreen() {
           res.data?.bankingDetails;
 
 
-        // ====================================
-        // VALIDATE PAYMENT DETAILS
-        // ====================================
+        const course =
+          res.data?.course;
+
+
+        // ======================================
+        // VALIDATE RESPONSE
+        // ======================================
 
         if (
+
           !payment?._id ||
+
           !payment?.paymentReference ||
+
           !payment?.amount ||
+
+          !course?._id ||
+
           !bankingDetails?.accountName ||
+
           !bankingDetails?.bankName ||
+
           !bankingDetails?.accountNumber ||
+
           !bankingDetails?.branchCode
+
         ) {
 
           console.log(
-            "INVALID PAYMENT RESPONSE:",
+            "INVALID COURSE PAYMENT RESPONSE:",
             res.data
           );
 
@@ -170,14 +196,20 @@ export default function PayVerificationScreen() {
         }
 
 
-        // ====================================
-        // SAVE CLEAN PAYMENT DETAILS
-        // ====================================
+        // ======================================
+        // SAVE PAYMENT DETAILS
+        // ======================================
 
         setPaymentDetails({
 
           paymentId:
             String(payment._id),
+
+          courseId:
+            String(course._id),
+
+          courseTitle:
+            String(course.title),
 
           amount:
             Number(payment.amount),
@@ -219,7 +251,7 @@ export default function PayVerificationScreen() {
       catch (err: any) {
 
         console.log(
-          "VERIFICATION PAYMENT ERROR:",
+          "COURSE PAYMENT ERROR:",
           err?.response?.data ||
           err?.message
         );
@@ -233,7 +265,7 @@ export default function PayVerificationScreen() {
 
           err?.message ||
 
-          "Failed to generate EFT payment details."
+          "Failed to generate course payment details."
 
         );
 
@@ -250,7 +282,7 @@ export default function PayVerificationScreen() {
 
   useEffect(() => {
 
-    createVerificationPayment();
+    createCoursePayment();
 
   }, []);
 
@@ -276,7 +308,7 @@ export default function PayVerificationScreen() {
     router.push({
 
       pathname:
-        "/(candidate)/upload-proof" as any,
+        "/(student)/upload-proof" as any,
 
       params: {
 
@@ -287,7 +319,10 @@ export default function PayVerificationScreen() {
           paymentDetails.paymentReference,
 
         amount:
-          String(paymentDetails.amount)
+          String(paymentDetails.amount),
+
+        courseTitle:
+          paymentDetails.courseTitle
 
       }
 
@@ -313,7 +348,7 @@ export default function PayVerificationScreen() {
 
         <Text style={styles.loadingText}>
 
-          Generating your EFT payment details...
+          Preparing your course payment...
 
         </Text>
 
@@ -325,7 +360,7 @@ export default function PayVerificationScreen() {
 
 
   // ==========================================
-  // FAILED
+  // ERROR
   // ==========================================
 
   if (!paymentDetails) {
@@ -343,7 +378,7 @@ export default function PayVerificationScreen() {
 
         <TouchableOpacity
           style={styles.button}
-          onPress={createVerificationPayment}
+          onPress={createCoursePayment}
         >
 
           <Text style={styles.buttonText}>
@@ -375,26 +410,25 @@ export default function PayVerificationScreen() {
 
       <Text style={styles.title}>
 
-        Candidate Verification Payment
+        Course Payment
 
       </Text>
 
 
-      <Text style={styles.subtitle}>
+      <Text style={styles.courseTitle}>
 
-        Please make an EFT payment using the
-        banking details below.
+        {paymentDetails.courseTitle}
 
       </Text>
 
 
-      {/* PAYMENT AMOUNT */}
+      {/* AMOUNT */}
 
       <View style={styles.amountCard}>
 
         <Text style={styles.amountLabel}>
 
-          Verification Fee
+          Course Fee
 
         </Text>
 
@@ -405,10 +439,17 @@ export default function PayVerificationScreen() {
 
         </Text>
 
+
+        <Text style={styles.fullPaymentText}>
+
+          Full payment required before course access.
+
+        </Text>
+
       </View>
 
 
-      {/* PAYMENT REFERENCE */}
+      {/* REFERENCE */}
 
       <View style={styles.referenceCard}>
 
@@ -498,7 +539,6 @@ export default function PayVerificationScreen() {
 
         </Text>
 
-
         <TouchableOpacity
           onPress={() =>
             copyText(
@@ -558,8 +598,7 @@ export default function PayVerificationScreen() {
 
         <Text style={styles.infoText}>
 
-          1. Make an EFT payment of
-          R{paymentDetails.amount}.
+          1. Pay the full course fee of R{paymentDetails.amount}.
 
         </Text>
 
@@ -580,16 +619,14 @@ export default function PayVerificationScreen() {
 
         <Text style={styles.infoText}>
 
-          4. Nakky Academy will review and verify
-          your payment.
+          4. Nakky Academy will review your payment.
 
         </Text>
 
 
         <Text style={styles.infoText}>
 
-          5. Your profile will receive a verified
-          badge once payment has been approved.
+          5. Your course will unlock once payment is approved.
 
         </Text>
 
@@ -614,7 +651,7 @@ export default function PayVerificationScreen() {
 
       <Text style={styles.note}>
 
-        Your candidate profile will only be verified
+        You will only receive access to the course
         after Nakky Academy has approved your EFT
         payment.
 
@@ -663,13 +700,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 27,
     fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: 8,
   },
 
-  subtitle: {
-    fontSize: 16,
+  courseTitle: {
+    fontSize: 17,
     color: "#666",
-    lineHeight: 23,
     marginBottom: 20,
   },
 
@@ -693,15 +729,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  card: {
-    backgroundColor: "#f5f5f5",
+  fullPaymentText: {
+    marginTop: 8,
+    color: "#666",
+    textAlign: "center",
+  },
+
+  referenceCard: {
+    backgroundColor: "#fff8e1",
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
   },
 
-  referenceCard: {
-    backgroundColor: "#fff8e1",
+  card: {
+    backgroundColor: "#f5f5f5",
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
@@ -721,7 +763,7 @@ const styles = StyleSheet.create({
   },
 
   reference: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "bold",
     letterSpacing: 1,
     marginBottom: 10,

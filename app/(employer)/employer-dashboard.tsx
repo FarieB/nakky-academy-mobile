@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,71 +9,59 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
 import DashboardButton from "../../components/DashboardButton";
 import DashboardCard from "../../components/DashboardCard";
 import DashboardHeader from "../../components/DashboardHeader";
 import LogoutButton from "../../components/LogoutButton";
 import SectionTitle from "../../components/SectionTitle";
-
 import API from "../../src/services/api";
 
 export default function EmployerDashboard() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [employerProfile, setEmployerProfile] = useState<any>(null);
 
-  const fetchDashboard = async () => {
+  // Combines both API calls and fixes the loading state when no token is found
+  const loadDashboardData = useCallback(async () => {
     try {
+      setLoading(true);
       const token = await AsyncStorage.getItem("token");
+      
+      if (!token) {
+        console.log("NO AUTH TOKEN FOUND");
+        setData(null);
+        setEmployerProfile(null);
+        return;
+      }
 
-      if (!token) return;
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
-      API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      // Runs both requests at the same time
+      const [dashboardResponse, profileResponse] = await Promise.all([
+        API.get("/dashboard"),
+        API.get("/profiles/employer"),
+      ]);
 
-      const res = await API.get("/dashboard");
-
-      setData(res.data);
+      setData(dashboardResponse.data);
+      console.log("EMPLOYER PROFILE LOADED:", profileResponse.data);
+      setEmployerProfile(profileResponse.data);
     } catch (err: any) {
       console.log(
         "EMPLOYER DASHBOARD ERROR:",
         err?.response?.data || err.message
       );
+      setData(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchEmployerProfile = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-
-      if (!token) return;
-
-      API.defaults.headers.common.Authorization = `Bearer ${token}`;
-
-      const response = await API.get("/profiles/employer");
-
-      console.log("EMPLOYER PROFILE LOADED:", response.data);
-
-      setEmployerProfile(response.data);
-    } catch (err: any) {
-      console.log(
-        "EMPLOYER PROFILE LOAD ERROR:",
-        err?.response?.data || err.message
-      );
-
-      setEmployerProfile(null);
-    }
-  };
-
-    useFocusEffect(
+  // Triggers data loading every time the screen comes into focus
+  useFocusEffect(
     useCallback(() => {
-      fetchDashboard();
-      fetchEmployerProfile();
-    }, [])
+      loadDashboardData();
+    }, [loadDashboardData])
   );
 
   if (loading) {
