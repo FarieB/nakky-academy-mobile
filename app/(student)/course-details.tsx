@@ -21,18 +21,15 @@ export default function CourseDetails() {
   }>();
 
   const [loading, setLoading] = useState(true);
-  const [processingPayment, setProcessingPayment] =
-    useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   const [course, setCourse] = useState<any>(null);
 
   const [enrolled, setEnrolled] = useState(false);
 
-  const [paymentStatus, setPaymentStatus] =
-    useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
-  const [paymentDetails, setPaymentDetails] =
-    useState<any>(null);
+  const [paymentDetails, setPaymentDetails] = useState<any>(null);
 
   // =====================================================
   // LOAD COURSE
@@ -42,55 +39,39 @@ export default function CourseDetails() {
     try {
       setLoading(true);
 
-      const token =
-        await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
-        Alert.alert(
-          "Login Required",
-          "Please log in again."
-        );
+        Alert.alert("Login Required", "Please log in again.");
 
         return;
       }
 
-      API.defaults.headers.common.Authorization =
-        `Bearer ${token}`;
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
-      const res =
-        await API.get(`/courses/${id}`);
+      const res = await API.get(`/courses/${id}`);
 
       setCourse(res.data);
 
       setEnrolled(res.data.isEnrolled === true);
 
-      // If backend later returns payment information,
-      // this safely picks it up.
+      // NOTE: assumes GET /courses/:id returns isEnrolled and
+      // paymentStatus — please confirm against courseController's
+      // getCourseById implementation.
       if (res.data.paymentStatus) {
         setPaymentStatus(res.data.paymentStatus);
       }
-
     } catch (err: any) {
-
-      console.log(
-        "LOAD COURSE ERROR:",
-        err?.response?.data || err.message
-      );
+      console.log("LOAD COURSE ERROR:", err?.response?.data || err.message);
 
       Alert.alert(
         "Error",
-        err?.response?.data?.message ||
-          "Unable to load course."
+        err?.response?.data?.message || "Unable to load course."
       );
-
     } finally {
-
       setLoading(false);
-
     }
-
   }, [id]);
-
 
   // =====================================================
   // REFRESH WHEN SCREEN BECOMES ACTIVE
@@ -98,64 +79,43 @@ export default function CourseDetails() {
 
   useFocusEffect(
     useCallback(() => {
-
       loadCourse();
-
     }, [loadCourse])
   );
-
 
   // =====================================================
   // CREATE EFT PAYMENT
   // =====================================================
 
   const createPayment = async () => {
-
     try {
-
       setProcessingPayment(true);
 
-      const token =
-        await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
-
-        Alert.alert(
-          "Login Required",
-          "Please log in again."
-        );
+        Alert.alert("Login Required", "Please log in again.");
 
         return;
-
       }
 
-
-      API.defaults.headers.common.Authorization =
-        `Bearer ${token}`;
-
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       // ==========================================
       // CREATE EFT COURSE PAYMENT
+      // matches POST /payments/course, { courseId }
+      // (paymentController.createCoursePayment)
       // ==========================================
 
-      const res =
-        await API.post(
-          `/courses/${id}/payment`
-        );
+      const res = await API.post("/payments/course", {
+        courseId: id,
+      });
 
-
-      console.log(
-        "COURSE PAYMENT RESPONSE:",
-        res.data
-      );
-
+      console.log("COURSE PAYMENT RESPONSE:", res.data);
 
       setPaymentDetails(res.data);
 
-      setPaymentStatus(
-        res.data?.payment?.status || "pending"
-      );
-
+      setPaymentStatus(res.data?.payment?.status || "pending");
 
       // ==========================================
       // SHOW EFT DETAILS
@@ -165,40 +125,27 @@ export default function CourseDetails() {
         "Payment Request Created",
         "Please make your EFT payment using the banking details and unique payment reference shown below. Your course will unlock after payment has been approved by Nakky Academy."
       );
-
-
     } catch (err: any) {
-
       console.log(
         "COURSE PAYMENT ERROR:",
         err?.response?.data || err.message
       );
 
-
       Alert.alert(
         "Payment Error",
-        err?.response?.data?.message ||
-          "Unable to create course payment."
+        err?.response?.data?.message || "Unable to create course payment."
       );
-
-
     } finally {
-
       setProcessingPayment(false);
-
     }
-
   };
-
 
   // =====================================================
   // LOADING
   // =====================================================
 
   if (loading) {
-
     return (
-
       <ActivityIndicator
         size="large"
         color="#E91E63"
@@ -206,444 +153,268 @@ export default function CourseDetails() {
           marginTop: 150,
         }}
       />
-
     );
-
   }
-
 
   // =====================================================
   // COURSE NOT FOUND
   // =====================================================
 
   if (!course) {
-
     return (
-
       <View style={styles.center}>
-
-        <Text>
-          Course not found.
-        </Text>
-
+        <Text>Course not found.</Text>
       </View>
-
     );
-
   }
 
+  const payment = paymentDetails?.payment;
 
-  const payment =
-    paymentDetails?.payment;
+  const bankingDetails = paymentDetails?.bankingDetails;
 
-  const bankingDetails =
-    paymentDetails?.bankingDetails;
+  const hasPendingPayment = payment?.status === "pending";
 
-  const hasPendingPayment =
-    payment?.status === "pending";
-
-  const isPaid =
-    enrolled ||
-    paymentStatus === "paid";
-
+  const isPaid = enrolled || paymentStatus === "paid";
 
   // =====================================================
   // MAIN SCREEN
   // =====================================================
 
   return (
-
-    <ScrollView
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
-
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* ========================================= */}
       {/* COURSE HEADER */}
       {/* ========================================= */}
 
       <View style={styles.banner}>
+        <Text style={styles.bannerEmoji}>📚</Text>
 
-        <Text style={styles.bannerEmoji}>
-          📚
-        </Text>
+        <Text style={styles.title}>{course.title}</Text>
 
-        <Text style={styles.title}>
-          {course.title}
-        </Text>
-
-        <Text style={styles.category}>
-          {course.category}
-        </Text>
-
+        <Text style={styles.category}>{course.category}</Text>
       </View>
-
 
       {/* ========================================= */}
       {/* ABOUT COURSE */}
       {/* ========================================= */}
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>About this course</Text>
 
-        <Text style={styles.sectionTitle}>
-          About this course
-        </Text>
-
-        <Text style={styles.description}>
-          {course.description}
-        </Text>
-
+        <Text style={styles.description}>{course.description}</Text>
       </View>
-
 
       {/* ========================================= */}
       {/* COURSE STATISTICS */}
       {/* ========================================= */}
 
       <View style={styles.statsCard}>
-
         <View style={styles.stat}>
+          <Text style={styles.statNumber}>{course.content?.length || 0}</Text>
 
-          <Text style={styles.statNumber}>
-            {course.content?.length || 0}
-          </Text>
-
-          <Text style={styles.statLabel}>
-            Lessons
-          </Text>
-
+          <Text style={styles.statLabel}>Lessons</Text>
         </View>
 
-
         <View style={styles.stat}>
+          <Text style={styles.statNumber}>{course.duration || 0}</Text>
 
-          <Text style={styles.statNumber}>
-            {course.duration || 0}
-          </Text>
-
-          <Text style={styles.statLabel}>
-            Hours
-          </Text>
-
+          <Text style={styles.statLabel}>Hours</Text>
         </View>
 
-
         <View style={styles.stat}>
+          <Text style={styles.statNumber}>{course.level}</Text>
 
-          <Text style={styles.statNumber}>
-            {course.level}
-          </Text>
-
-          <Text style={styles.statLabel}>
-            Level
-          </Text>
-
+          <Text style={styles.statLabel}>Level</Text>
         </View>
-
       </View>
-
 
       {/* ========================================= */}
       {/* PRICE */}
       {/* ========================================= */}
 
       <View style={styles.priceCard}>
-
-        <Text style={styles.priceLabel}>
-          Course Price
-        </Text>
+        <Text style={styles.priceLabel}>Course Price</Text>
 
         <Text style={styles.price}>
           R{Number(course.price || 1200).toLocaleString()}
         </Text>
 
         <Text style={styles.fullPaymentText}>
-          Full payment is required before you can
-          access this course.
+          Full payment is required before you can access this course.
         </Text>
-
       </View>
-
 
       {/* ========================================= */}
       {/* COURSE FEATURES */}
       {/* ========================================= */}
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Course Includes</Text>
 
-        <Text style={styles.sectionTitle}>
-          Course Includes
-        </Text>
+        <Text style={styles.feature}>🎥 Video Lessons</Text>
 
-        <Text style={styles.feature}>
-          🎥 Video Lessons
-        </Text>
+        <Text style={styles.feature}>📚 Learning Material</Text>
 
-        <Text style={styles.feature}>
-          📚 Learning Material
-        </Text>
+        <Text style={styles.feature}>📈 Progress Tracking</Text>
 
-        <Text style={styles.feature}>
-          📈 Progress Tracking
-        </Text>
+        <Text style={styles.feature}>🏆 Certificate of Completion</Text>
 
-        <Text style={styles.feature}>
-          🏆 Certificate of Completion
-        </Text>
-
-        <Text style={styles.feature}>
-          ♾ Lifetime Access
-        </Text>
-
+        <Text style={styles.feature}>♾ Lifetime Access</Text>
       </View>
-
 
       {/* ========================================= */}
       {/* EFT PAYMENT DETAILS */}
       {/* ========================================= */}
 
       {hasPendingPayment && bankingDetails && (
-
         <View style={styles.paymentCard}>
-
-          <Text style={styles.paymentTitle}>
-            🏦 EFT Payment Details
-          </Text>
+          <Text style={styles.paymentTitle}>🏦 EFT Payment Details</Text>
 
           <Text style={styles.paymentNotice}>
-            Please make the full payment using the
-            banking details below.
+            Please make the full payment using the banking details below.
           </Text>
 
-
           <View style={styles.paymentRow}>
-
-            <Text style={styles.paymentLabel}>
-              Account Name
-            </Text>
+            <Text style={styles.paymentLabel}>Account Name</Text>
 
             <Text style={styles.paymentValue}>
               {bankingDetails.accountName}
             </Text>
-
           </View>
 
-
           <View style={styles.paymentRow}>
+            <Text style={styles.paymentLabel}>Bank</Text>
 
-            <Text style={styles.paymentLabel}>
-              Bank
-            </Text>
-
-            <Text style={styles.paymentValue}>
-              {bankingDetails.bankName}
-            </Text>
-
+            <Text style={styles.paymentValue}>{bankingDetails.bankName}</Text>
           </View>
 
-
           <View style={styles.paymentRow}>
-
-            <Text style={styles.paymentLabel}>
-              Account Number
-            </Text>
+            <Text style={styles.paymentLabel}>Account Number</Text>
 
             <Text style={styles.paymentValue}>
               {bankingDetails.accountNumber}
             </Text>
-
           </View>
 
-
           <View style={styles.paymentRow}>
-
-            <Text style={styles.paymentLabel}>
-              Branch Code
-            </Text>
+            <Text style={styles.paymentLabel}>Branch Code</Text>
 
             <Text style={styles.paymentValue}>
               {bankingDetails.branchCode}
             </Text>
-
           </View>
 
-
           <View style={styles.paymentRow}>
-
-            <Text style={styles.paymentLabel}>
-              Account Type
-            </Text>
+            <Text style={styles.paymentLabel}>Account Type</Text>
 
             <Text style={styles.paymentValue}>
               {bankingDetails.accountType}
             </Text>
-
           </View>
-
 
           {/* ===================================== */}
           {/* AMOUNT */}
           {/* ===================================== */}
 
           <View style={styles.amountBox}>
-
-            <Text style={styles.amountLabel}>
-              Amount to Pay
-            </Text>
+            <Text style={styles.amountLabel}>Amount to Pay</Text>
 
             <Text style={styles.amount}>
               R{Number(payment.amount).toLocaleString()}
             </Text>
-
           </View>
-
 
           {/* ===================================== */}
           {/* UNIQUE REFERENCE */}
           {/* ===================================== */}
 
           <View style={styles.referenceBox}>
-
             <Text style={styles.referenceLabel}>
               IMPORTANT: Payment Reference
             </Text>
 
-            <Text style={styles.reference}>
-              {payment.paymentReference}
-            </Text>
+            <Text style={styles.reference}>{payment.paymentReference}</Text>
 
             <Text style={styles.referenceNotice}>
-              Please use this reference exactly as
-              shown when making your EFT payment.
+              Please use this reference exactly as shown when making your
+              EFT payment.
             </Text>
-
           </View>
-
 
           {/* ===================================== */}
           {/* PAYMENT STATUS */}
           {/* ===================================== */}
 
           <View style={styles.pendingBox}>
-
-            <Text style={styles.pendingTitle}>
-              ⏳ Payment Pending
-            </Text>
+            <Text style={styles.pendingTitle}>⏳ Payment Pending</Text>
 
             <Text style={styles.pendingText}>
-              Your course will become available once
-              Nakky Academy verifies and approves your
-              payment.
+              Your course will become available once Nakky Academy
+              verifies and approves your payment.
             </Text>
-
           </View>
-
         </View>
-
       )}
-
 
       {/* ========================================= */}
       {/* PAID - START LEARNING */}
       {/* ========================================= */}
 
       {isPaid ? (
-
         <TouchableOpacity
           style={styles.learnButton}
           onPress={() =>
-
+            // NOTE: guessed route — update if your course-player
+            // screen lives somewhere else.
             router.push({
-
-              pathname:
-                "/(student)/course-player",
-
+              pathname: "/student/course-player",
               params: {
                 id: course._id,
               },
-
             } as any)
-
           }
         >
-
-          <Text style={styles.learnText}>
-            ▶ Start Learning
-          </Text>
-
+          <Text style={styles.learnText}>▶ Start Learning</Text>
         </TouchableOpacity>
-
       ) : hasPendingPayment ? (
-
-        <TouchableOpacity
-          style={styles.pendingButton}
-          disabled
-        >
-
+        <TouchableOpacity style={styles.pendingButton} disabled>
           <Text style={styles.pendingButtonText}>
             ⏳ Payment Pending Approval
           </Text>
-
         </TouchableOpacity>
-
       ) : (
-
         <TouchableOpacity
           style={styles.buyButton}
           onPress={createPayment}
           disabled={processingPayment}
         >
-
           {processingPayment ? (
-
-            <ActivityIndicator
-              color="#FFFFFF"
-            />
-
+            <ActivityIndicator color="#FFFFFF" />
           ) : (
-
             <Text style={styles.buyText}>
-              💳 Pay R
-              {Number(course.price || 1200)
-                .toLocaleString()}{" "}
-              via EFT
+              💳 Pay R{Number(course.price || 1200).toLocaleString()} via
+              EFT
             </Text>
-
           )}
-
         </TouchableOpacity>
-
       )}
-
 
       {/* ========================================= */}
       {/* BACK */}
       {/* ========================================= */}
 
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.back()}
-      >
-
-        <Text style={styles.backText}>
-          Back
-        </Text>
-
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
-
     </ScrollView>
-
   );
-
 }
-
 
 // =====================================================
 // STYLES
 // =====================================================
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
@@ -771,7 +542,6 @@ const styles = StyleSheet.create({
     color: "#444444",
   },
 
-
   // =========================================
   // EFT PAYMENT
   // =========================================
@@ -887,7 +657,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-
   // =========================================
   // BUTTONS
   // =========================================
@@ -955,5 +724,4 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
   },
-
 });
