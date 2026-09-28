@@ -39,7 +39,7 @@ export default function ChatScreen() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
-  const typingTimeout = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState("");
 

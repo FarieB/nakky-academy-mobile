@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { File, Paths } from "expo-file-system";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import * as Sharing from "expo-sharing";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 
 import API from "../../src/services/api";
 
@@ -40,11 +47,13 @@ export default function CoursePlayer() {
   // LOAD COURSE
   // ============================================================
 
-  useEffect(() => {
-    if (!id) return;
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
 
-    loadCourse();
-  }, [id]);
+      loadCourse();
+    }, [id])
+  );
 
   const loadCourse = async () => {
     try {
@@ -75,18 +84,34 @@ export default function CoursePlayer() {
         `/courses/${id}/content`
       );
 
-      const courseData =
-        res.data;
+     const courseData = res.data;
 
-      setCourse(courseData);
+    // ----------------------------------------------------------
+    // SUPPORT DIFFERENT BACKEND RESPONSE SHAPES
+    // ----------------------------------------------------------
 
-      // ----------------------------------------------------------
-      // SUPPORT DIFFERENT BACKEND RESPONSE SHAPES
-      // ----------------------------------------------------------
+    const loadedCourse = {
+    ...(courseData?.course || {}),
 
-      const enrollment =
-        courseData.enrollment ||
-        null;
+    modules:
+      courseData?.modules ||
+      courseData?.course?.modules ||
+      [],
+
+    finalExam:
+      courseData?.finalExam ||
+      courseData?.course?.finalExam ||
+      null,
+  };
+
+    setCourse(loadedCourse);
+
+    const enrollment =
+      courseData?.enrollment ||
+      courseData?.data?.enrollment ||
+      null;
+
+    setCourse(loadedCourse);
 
       const completed =
         enrollment?.lessonsCompleted ||
@@ -121,25 +146,27 @@ export default function CoursePlayer() {
         )
       );
     } catch (err: any) {
-      console.error(
-        "COURSE PLAYER ERROR:",
-        err
-      );
+      const status = err.response?.status;
 
-      const status =
-        err.response?.status;
-
+      // 403 is expected when payment is still awaiting approval.
+      // Do not log it as an error.
       if (status === 403) {
         Alert.alert(
-          "Course Access Required",
-          err.response?.data?.message ||
-            "You need to complete payment before accessing this course."
+          "Payment Verification in Progress",
+          "Thank you! Your payment is currently being verified by Nakky Academy administration. Access to this course will be granted as soon as your payment is approved.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.back(),
+            },
+          ]
         );
-
-        router.back();
 
         return;
       }
+
+      // Log only unexpected errors.
+      console.error("COURSE PLAYER ERROR:", err);
 
       Alert.alert(
         "Error",
@@ -187,11 +214,20 @@ export default function CoursePlayer() {
   // COURSE COMPLETION
   // ============================================================
 
+  const finalExamRequired =
+  course?.finalExam?.enabled === true;
+
+  const finalExamPassed =
+    course?.finalExam?.progression?.status ===
+    "passed";
+
   const courseCompleted =
-    Boolean(
-      course?.completed ||
-        progress >= 100
-    );
+    finalExamRequired
+      ? finalExamPassed
+      : Boolean(
+          course?.completed ||
+            progress >= 100
+        );
 
   // ============================================================
   // LESSON COMPLETED
@@ -206,6 +242,62 @@ export default function CoursePlayer() {
   };
 
   // ============================================================
+  // MODULE / ASSIGNMENT PROGRESSION HELPERS
+  // ============================================================
+
+  const getModuleProgression = (
+    module: any
+  ) => {
+    return (
+      module?.progression || {
+        unlocked: false,
+        lessonsCompleted: false,
+        lessonsTotal: 0,
+        assignmentEnabled: false,
+        assignmentStatus: "not_required",
+        assignmentAvailable: false,
+        moduleCompleted: false,
+        attempts: 0,
+        percentage: 0,
+      }
+    );
+  };
+
+  const getAssignmentStatusText = (
+    module: any
+  ) => {
+    const progression =
+      getModuleProgression(module);
+
+    if (!progression.assignmentEnabled) {
+      return "No assignment required";
+    }
+
+    switch (
+      progression.assignmentStatus
+    ) {
+      case "passed":
+        return "Assignment Passed";
+
+      case "failed":
+        return "Assignment Failed";
+
+      case "pending_review":
+        return "Under Review";
+
+      case "not_started":
+      default:
+        if (
+          progression.assignmentAvailable
+        ) {
+          return "Assignment Available";
+        }
+
+        return "Assignment Locked";
+    }
+  };
+
+  // ============================================================
   // CHECK IF LESSON IS UNLOCKED
   // ============================================================
 
@@ -213,68 +305,48 @@ export default function CoursePlayer() {
     moduleIndex: number,
     lessonIndex: number
   ) => {
-    // First lesson of first module
-    if (
-      moduleIndex === 0 &&
-      lessonIndex === 0
-    ) {
+    const module =
+      modules?.[moduleIndex];
+
+    if (!module) {
+      return false;
+    }
+
+    const progression =
+      module.progression;
+
+    /**
+     * Backend is the authority for whether
+     * the module itself is unlocked.
+     */
+    if (!progression?.unlocked) {
+      return false;
+    }
+
+    /**
+     * First lesson in an unlocked module
+     * is available.
+     */
+    if (lessonIndex === 0) {
       return true;
     }
 
-    const currentModule =
-      modules[moduleIndex];
+    /**
+     * Every subsequent lesson requires the
+     * previous lesson to be completed.
+     */
+    const previousLesson =
+      module.lessons?.[
+        lessonIndex - 1
+      ];
 
-    // ----------------------------------------------------------
-    // PREVIOUS LESSON IN SAME MODULE
-    // ----------------------------------------------------------
-
-    if (lessonIndex > 0) {
-      const previousLesson =
-        currentModule?.lessons?.[
-          lessonIndex - 1
-        ];
-
-      if (!previousLesson) {
-        return true;
-      }
-
-      return isCompleted(
-        previousLesson
-      );
+    if (!previousLesson) {
+      return false;
     }
 
-    // ----------------------------------------------------------
-    // FIRST LESSON OF MODULE
-    // ----------------------------------------------------------
-
-    if (moduleIndex > 0) {
-      const previousModule =
-        modules[
-          moduleIndex - 1
-        ];
-
-      const previousLessons =
-        previousModule?.lessons ||
-        [];
-
-      if (
-        previousLessons.length ===
-        0
-      ) {
-        return true;
-      }
-
-      const lastPreviousLesson =
-        previousLessons[
-          previousLessons.length - 1
-        ];
-
-      return isCompleted(
-        lastPreviousLesson
-      );
-    }
-
-    return true;
+    return isCompleted(
+      previousLesson
+    );
   };
 
   // ============================================================
@@ -309,6 +381,8 @@ export default function CoursePlayer() {
       return;
     }
 
+    
+
     router.push({
       pathname:
         "/(student)/lesson-player",
@@ -334,26 +408,50 @@ export default function CoursePlayer() {
     module: any,
     moduleIndex: number
   ) => {
+    const progression =
+      getModuleProgression(module);
+
     if (
-      !module?.assignment
-        ?.enabled
+      !progression.assignmentEnabled
     ) {
+      Alert.alert(
+        "No Assignment",
+        "This module does not have an assignment."
+      );
+
       return;
     }
 
-    const lessons =
-      module.lessons || [];
-
-    const allLessonsCompleted =
-      lessons.every(
-        (lesson: any) =>
-          isCompleted(lesson)
+    if (
+      progression.assignmentStatus ===
+      "pending_review"
+    ) {
+      Alert.alert(
+        "Under Review",
+        "Your assignment has been submitted and is awaiting review."
       );
 
-    if (!allLessonsCompleted) {
+      return;
+    }
+
+    if (
+      progression.assignmentStatus ===
+      "passed"
+    ) {
+      Alert.alert(
+        "Assignment Passed",
+        "You have already passed this assignment."
+      );
+
+      return;
+    }
+
+    if (
+      !progression.assignmentAvailable
+    ) {
       Alert.alert(
         "Assignment Locked",
-        "Please complete all lessons in this module before attempting the assignment."
+        "Complete all lessons in this module before taking the assignment."
       );
 
       return;
@@ -362,16 +460,16 @@ export default function CoursePlayer() {
     router.push({
       pathname:
         "/(student)/assignment",
+
       params: {
-        courseId: String(
-          course._id
-        ),
-        moduleId: String(
-          module._id
-        ),
-        moduleIndex: String(
-          moduleIndex
-        ),
+        courseId:
+          String(course._id),
+
+        moduleId:
+          String(module._id),
+
+        moduleIndex:
+          String(moduleIndex),
       },
     } as any);
   };
@@ -381,17 +479,49 @@ export default function CoursePlayer() {
   // ============================================================
 
   const openFinalExam = () => {
-    if (
-      !course?.finalExam
-        ?.enabled
-    ) {
+    const finalExam =
+      course?.finalExam;
+
+    const progression =
+      finalExam?.progression;
+
+    if (!finalExam?.enabled) {
+      Alert.alert(
+        "Final Exam",
+        "This course does not have a final exam."
+      );
+
       return;
     }
 
-    if (progress < 100) {
+    if (!progression?.unlocked) {
       Alert.alert(
-        "Final Examination Locked",
-        "Please complete all course lessons before attempting the final examination."
+        "Final Exam Locked",
+        "Complete all modules and pass all required assignments before taking the final exam."
+      );
+
+      return;
+    }
+
+    if (
+      progression.status ===
+      "pending_review"
+    ) {
+      Alert.alert(
+        "Under Review",
+        "Your final exam is awaiting manual review."
+      );
+
+      return;
+    }
+
+    if (
+      progression.status ===
+      "passed"
+    ) {
+      Alert.alert(
+        "Final Exam Passed",
+        "You have already passed the final exam."
       );
 
       return;
@@ -400,10 +530,10 @@ export default function CoursePlayer() {
     router.push({
       pathname:
         "/(student)/final-exam",
+
       params: {
-        courseId: String(
-          course._id
-        ),
+        courseId:
+          String(course._id),
       },
     } as any);
   };
@@ -412,62 +542,128 @@ export default function CoursePlayer() {
   // CERTIFICATE
   // ============================================================
 
-  const openCertificate = () => {
-    if (!courseCompleted) {
+    const openCertificate = () => {
+      if (!courseCompleted) {
+        Alert.alert(
+          "Certificate",
+          "Complete the course before accessing your certificate."
+        );
+
+        return;
+      }
+
+      router.push({
+        pathname:
+          "/(student)/certificate",
+        params: {
+          id: String(
+            course._id
+          ),
+        },
+      } as any);
+    };
+
+    // ============================================================
+    // DOWNLOAD CERTIFICATE
+    // ============================================================
+
+  const downloadCertificate = async () => {
+  if (!course?._id) {
+    Alert.alert(
+      "Certificate",
+      "Course information is missing."
+    );
+    return;
+  }
+
+  try {
+    const token =
+      await AsyncStorage.getItem("token");
+
+    if (!token) {
       Alert.alert(
         "Certificate",
-        "Complete the course before accessing your certificate."
+        "You are not logged in."
       );
-
       return;
     }
 
-    router.push({
-      pathname:
-        "/(student)/certificate",
-      params: {
-        id: String(
-          course._id
-        ),
-      },
-    } as any);
-  };
+    const baseURL =
+      API.defaults.baseURL;
 
-  // ============================================================
-  // DOWNLOAD CERTIFICATE
-  // ============================================================
+    if (!baseURL) {
+      throw new Error(
+        "API base URL is not configured."
+      );
+    }
 
-  const downloadCertificate =
-    async () => {
-      try {
-        const token =
-          await AsyncStorage.getItem(
-            "token"
-          );
+    const certificateUrl =
+      `${baseURL}/courses/${course._id}/download-certificate`;
 
-        API.defaults.headers.common.Authorization =
-          `Bearer ${token}`;
+    /*
+     * Download the certificate into a unique
+     * temporary PDF file.
+     */
+    const certificateFile =
+      new File(
+        Paths.cache,
+        `Nakky-Academy-Certificate-${course._id}-${Date.now()}.pdf`
+      );
 
-        const response =
-          await API.get(
-            `/courses/${course._id}/download-certificate`
-          );
+    const downloadedFile =
+      await File.downloadFileAsync(
+        certificateUrl,
+        certificateFile,
+        {
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
+          },
+        }
+      );
 
-        Alert.alert(
-          "Certificate Ready",
-          response.data
-            ?.message ||
-            "Certificate downloaded successfully."
-        );
-      } catch (err: any) {
-        Alert.alert(
-          "Certificate",
-          err.response?.data
-            ?.message ||
-            "Unable to download certificate."
-        );
+    console.log(
+      "Certificate downloaded:",
+      downloadedFile.uri
+    );
+
+    /*
+     * Check whether Android can share/save
+     * the PDF through its system interface.
+     */
+    const sharingAvailable =
+      await Sharing.isAvailableAsync();
+
+    if (!sharingAvailable) {
+      Alert.alert(
+        "Certificate",
+        "Your certificate was downloaded, but this device does not support saving or sharing the PDF."
+      );
+      return;
+    }
+
+    await Sharing.shareAsync(
+      downloadedFile.uri,
+      {
+        mimeType: "application/pdf",
+        dialogTitle:
+          "Save Nakky Academy Certificate",
+        UTI: "com.adobe.pdf",
       }
-    };
+    );
+  } catch (error: any) {
+    console.error(
+      "Certificate download error:",
+      error
+    );
+
+    Alert.alert(
+      "Certificate",
+      error?.message ||
+        "Unable to save your certificate."
+    );
+  }
+};
 
   // ============================================================
   // LEGACY COURSE
@@ -475,6 +671,21 @@ export default function CoursePlayer() {
 
   const legacyContent =
     course?.content || [];
+
+  // ============================================================
+  // FINAL EXAM PROGRESSION
+  // ============================================================
+
+  const finalExamProgression =
+    course?.finalExam?.progression;
+
+  const finalExamUnlocked =
+    finalExamProgression?.unlocked ===
+    true;
+
+  const finalExamStatus =
+    finalExamProgression?.status ||
+    "not_started";
 
   // ============================================================
   // LOADING
@@ -876,8 +1087,14 @@ export default function CoursePlayer() {
 
                       const hasVideo =
                         Boolean(
-                          lesson.video
+                          lesson.videos
+                            ?.uploaded
                             ?.filename ||
+                            lesson.videos
+                              ?.external
+                              ?.url ||
+                            lesson.video
+                              ?.filename ||
                             lesson.video
                               ?.url ||
                             lesson.videoUrl
@@ -1025,90 +1242,118 @@ export default function CoursePlayer() {
 
                   {/* MODULE ASSIGNMENT */}
 
-                  {assignment?.enabled && (
-                    <TouchableOpacity
-                      style={[
-                        styles.assignmentCard,
-                        !moduleComplete &&
-                          styles.lockedAssignment,
-                      ]}
-                      onPress={() =>
-                        openAssignment(
-                          module,
-                          moduleIndex
-                        )
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.assignmentIcon
-                        }
-                      >
-                        📝
-                      </Text>
+                  {assignment?.enabled &&
+                    (() => {
+                      const progression =
+                        getModuleProgression(
+                          module
+                        );
 
-                      <View
-                        style={
-                          styles.assignmentContent
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.assignmentLabel
-                          }
-                        >
-                          MODULE ASSIGNMENT
-                        </Text>
+                      const assignmentStatus =
+                        progression.assignmentStatus;
 
-                        <Text
-                          style={
-                            styles.assignmentTitle
-                          }
-                        >
-                          {assignment.title ||
-                            "Module Assignment"}
-                        </Text>
+                      const assignmentAvailable =
+                        progression.assignmentAvailable;
 
-                        <Text
-                          style={
-                            styles.assignmentDetails
-                          }
-                        >
-                          {assignment
-                            .questions
-                            ?.length ||
-                            0}{" "}
-                          questions
-                          {typeof assignment.passMark ===
-                          "number"
-                            ? ` • Pass mark ${assignment.passMark}%`
-                            : ""}
-                        </Text>
+                      const assignmentDisabled =
+                        !assignmentAvailable &&
+                        assignmentStatus !==
+                          "failed";
 
-                        {!moduleComplete && (
+                      return (
+                        <>
                           <Text
                             style={
-                              styles.assignmentLockedText
+                              styles.assignmentStatusText
                             }
                           >
-                            Complete all
-                            module lessons
-                            first.
+                            {getAssignmentStatusText(
+                              module
+                            )}
                           </Text>
-                        )}
-                      </View>
 
-                      <Text
-                        style={
-                          styles.lessonArrow
-                        }
-                      >
-                        {moduleComplete
-                          ? "›"
-                          : "🔒"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                          <TouchableOpacity
+                            style={[
+                              styles.assignmentCard,
+                              assignmentDisabled &&
+                                styles.lockedAssignment,
+                            ]}
+                            disabled={
+                              assignmentDisabled
+                            }
+                            onPress={() =>
+                              openAssignment(
+                                module,
+                                moduleIndex
+                              )
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.assignmentIcon
+                              }
+                            >
+                              📝
+                            </Text>
+
+                            <View
+                              style={
+                                styles.assignmentContent
+                              }
+                            >
+                              <Text
+                                style={
+                                  styles.assignmentLabel
+                                }
+                              >
+                                MODULE ASSIGNMENT
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.assignmentTitle
+                                }
+                              >
+                                {assignment.title ||
+                                  "Module Assignment"}
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.assignmentDetails
+                                }
+                              >
+                                {assignment
+                                  .questions
+                                  ?.length ||
+                                  0}{" "}
+                                questions
+                                {typeof assignment.passMark ===
+                                "number"
+                                  ? ` • Pass mark ${assignment.passMark}%`
+                                  : ""}
+                              </Text>
+                            </View>
+
+                            <Text
+                              style={
+                                styles.lessonArrow
+                              }
+                            >
+                              {assignmentStatus ===
+                              "passed"
+                                ? "✓"
+                                : assignmentStatus ===
+                                  "pending_review"
+                                ? "⏳"
+                                : assignmentDisabled
+                                ? "🔒"
+                                : "›"}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      );
+                    })()}
                 </View>
               );
             }
@@ -1167,7 +1412,7 @@ export default function CoursePlayer() {
                           "/(student)/lesson-player",
                         params: {
                           courseId:
-                            course._id,
+                            String(course._id),
                           moduleIndex:
                             "0",
                           lessonIndex:
@@ -1355,9 +1600,12 @@ export default function CoursePlayer() {
           <TouchableOpacity
             style={[
               styles.examButton,
-              progress < 100 &&
+              !finalExamUnlocked &&
                 styles.disabledExamButton,
             ]}
+            disabled={
+              !finalExamUnlocked
+            }
             onPress={
               openFinalExam
             }
@@ -1367,9 +1615,15 @@ export default function CoursePlayer() {
                 styles.examButtonText
               }
             >
-              {progress >= 100
-                ? "Start Final Examination"
-                : "Complete Lessons First"}
+              {finalExamStatus ===
+              "passed"
+                ? "Exam Passed"
+                : finalExamStatus ===
+                  "pending_review"
+                ? "Under Review"
+                : finalExamUnlocked
+                ? "Start Final Exam"
+                : "Final Exam Locked"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1820,6 +2074,13 @@ const styles = StyleSheet.create({
   // ------------------------------------------------------------
   // ASSIGNMENT
   // ------------------------------------------------------------
+
+  assignmentStatusText: {
+    fontSize: 13,
+    marginTop: 6,
+    marginBottom: 10,
+    opacity: 0.75,
+  },
 
   assignmentCard: {
     backgroundColor: "#FFF8E1",

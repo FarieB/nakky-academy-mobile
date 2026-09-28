@@ -271,8 +271,16 @@ export default function StudentDashboard() {
       ? enrollments[0]
       : null;
 
-  const completedCourses =
-    data?.completedCourses || 0;
+  const completedCourses = Array.isArray(
+  data?.completedCourses
+)
+  ? data.completedCourses.length
+  : typeof data?.completedCourses === "number"
+    ? data.completedCourses
+    : data?.completedCourses &&
+        typeof data.completedCourses === "object"
+      ? 1
+      : 0;
 
   // ============================================================
   // TOTAL PROGRESS
@@ -528,7 +536,7 @@ export default function StudentDashboard() {
                 onPress={() =>
                   router.push({
                     pathname:
-                      "/student/course-details",
+                      "/(student)/course-details",
                     params: {
                       id: course._id,
                     },

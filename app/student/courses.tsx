@@ -89,7 +89,7 @@ export default function CoursesScreen() {
       activeOpacity={0.85}
       onPress={() =>
         router.push({
-          pathname: "/student/course-details",
+          pathname: "/(student)/course-details",
           params: {
             id: item._id,
           },

@@ -26,3 +26,32 @@ export const Theme = {
     xl: 32,
   },
 };
+
+/**
+ * Theme colors used by the Expo-generated UI components.
+ * Keep these separate from Theme so existing Nakky Academy
+ * components using Theme.colors continue working.
+ */
+export const Colors = {
+  light: {
+    text: Theme.colors.text,
+    background: Theme.colors.background,
+    tint: Theme.colors.primary,
+    icon: Theme.colors.subtitle,
+    tabIconDefault: Theme.colors.subtitle,
+    tabIconSelected: Theme.colors.primary,
+    card: Theme.colors.card,
+    border: Theme.colors.border,
+  },
+
+  dark: {
+    text: "#ffffff",
+    background: "#121212",
+    tint: Theme.colors.secondary,
+    icon: "#cccccc",
+    tabIconDefault: "#999999",
+    tabIconSelected: Theme.colors.secondary,
+    card: "#1e1e1e",
+    border: "#333333",
+  },
+};

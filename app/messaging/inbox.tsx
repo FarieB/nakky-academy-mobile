@@ -141,17 +141,17 @@ export default function InboxScreen() {
           </View>
         }
         renderItem={({ item }: any) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: `/messaging/${item._id}`,
-                params: {
-                  name: item.firstName || item.name,
-                },
-              })
-            }
-          >
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push({
+                    pathname: "/messaging/[userId]",
+                    params: {
+                      userId: String(item._id),
+                    },
+                  })
+                }
+              >
             <Image
               source={{
                 uri: item.profilePhoto || "https://via.placeholder.com/100",

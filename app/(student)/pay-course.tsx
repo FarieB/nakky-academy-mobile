@@ -17,13 +17,15 @@ import * as Clipboard from "expo-clipboard";
 import API from "../../src/services/api";
 
 
+// =====================================================
+// TYPES
+// =====================================================
+
 interface PaymentDetails {
   paymentId: string;
   courseId: string;
   courseTitle: string;
-
   amount: number;
-
   paymentReference: string;
 
   accountName: string;
@@ -31,289 +33,240 @@ interface PaymentDetails {
   accountNumber: string;
   branchCode: string;
   accountType: string;
+
+  status?: string;
+  proofStatus?: string;
 }
 
 
-export default function PayCourseScreen() {
+// =====================================================
+// SCREEN
+// =====================================================
 
+export default function PayCourseScreen() {
   const router = useRouter();
 
-  const { courseId } =
-    useLocalSearchParams();
+  const { courseId } = useLocalSearchParams<{
+    courseId?: string;
+  }>();
 
-
-  const [loading, setLoading] =
-    useState(true);
-
+  const [loading, setLoading] = useState(true);
 
   const [paymentDetails, setPaymentDetails] =
     useState<PaymentDetails | null>(null);
 
 
-  // ==========================================
+  // ===================================================
   // COPY TEXT
-  // ==========================================
+  // ===================================================
 
   const copyText = async (
     text: string,
     label: string
   ) => {
-
     try {
-
       await Clipboard.setStringAsync(text);
 
       Alert.alert(
         "Copied",
         `${label} copied successfully.`
       );
-
-    }
-
-    catch {
+    } catch (error) {
+      console.error("COPY ERROR:", error);
 
       Alert.alert(
         "Error",
         "Failed to copy text."
       );
-
     }
-
   };
 
 
-  // ==========================================
+  // ===================================================
   // CREATE COURSE PAYMENT
-  // ==========================================
+  // ===================================================
 
-  const createCoursePayment =
-    async () => {
+  const createCoursePayment = async () => {
+    try {
+      setLoading(true);
 
-      try {
+      const token =
+        await AsyncStorage.getItem("token");
 
-        setLoading(true);
+      if (!token) {
+        Alert.alert(
+          "Session Expired",
+          "Please login again."
+        );
+
+        return;
+      }
+
+      if (!courseId) {
+        Alert.alert(
+          "Error",
+          "Course information is missing."
+        );
+
+        router.back();
+
+        return;
+      }
+
+      API.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${token}`;
 
 
-        const token =
-          await AsyncStorage.getItem(
-            "token"
-          );
-
-
-        if (!token) {
-
-          Alert.alert(
-            "Session Expired",
-            "Please login again."
-          );
-
-          return;
-
+      const res = await API.post(
+        "/payments/course",
+        {
+          courseId: String(courseId),
         }
+      );
 
 
-        if (!courseId) {
-
-          Alert.alert(
-            "Error",
-            "Course information is missing."
-          );
-
-          router.back();
-
-          return;
-
-        }
+      console.log(
+        "COURSE PAYMENT RESPONSE:",
+        res.data
+      );
 
 
-        API.defaults.headers.common[
-          "Authorization"
-        ] =
-          `Bearer ${token}`;
+      const payment =
+        res.data?.payment;
+
+      const bankingDetails =
+        res.data?.bankingDetails;
+
+      const course =
+        res.data?.course;
 
 
-        const res =
-          await API.post(
-            "/payments/course",
-            {
-              courseId
-            }
-          );
+      // ================================================
+      // VALIDATE RESPONSE
+      // ================================================
 
-
+      if (
+        !payment?._id ||
+        !payment?.paymentReference ||
+        payment?.amount === undefined ||
+        !course?._id ||
+        !course?.title ||
+        !bankingDetails?.accountName ||
+        !bankingDetails?.bankName ||
+        !bankingDetails?.accountNumber ||
+        !bankingDetails?.branchCode
+      ) {
         console.log(
-          "COURSE PAYMENT RESPONSE:",
+          "INVALID COURSE PAYMENT RESPONSE:",
           res.data
         );
 
-
-        const payment =
-          res.data?.payment;
-
-
-        const bankingDetails =
-          res.data?.bankingDetails;
-
-
-        const course =
-          res.data?.course;
-
-
-        // ======================================
-        // VALIDATE RESPONSE
-        // ======================================
-
-        if (
-
-          !payment?._id ||
-
-          !payment?.paymentReference ||
-
-          !payment?.amount ||
-
-          !course?._id ||
-
-          !bankingDetails?.accountName ||
-
-          !bankingDetails?.bankName ||
-
-          !bankingDetails?.accountNumber ||
-
-          !bankingDetails?.branchCode
-
-        ) {
-
-          console.log(
-            "INVALID COURSE PAYMENT RESPONSE:",
-            res.data
-          );
-
-
-          throw new Error(
-            "The server did not generate valid payment details."
-          );
-
-        }
-
-
-        // ======================================
-        // SAVE PAYMENT DETAILS
-        // ======================================
-
-        setPaymentDetails({
-
-          paymentId:
-            String(payment._id),
-
-          courseId:
-            String(course._id),
-
-          courseTitle:
-            String(course.title),
-
-          amount:
-            Number(payment.amount),
-
-          paymentReference:
-            String(
-              payment.paymentReference
-            ),
-
-          accountName:
-            String(
-              bankingDetails.accountName
-            ),
-
-          bankName:
-            String(
-              bankingDetails.bankName
-            ),
-
-          accountNumber:
-            String(
-              bankingDetails.accountNumber
-            ),
-
-          branchCode:
-            String(
-              bankingDetails.branchCode
-            ),
-
-          accountType:
-            String(
-              bankingDetails.accountType || ""
-            )
-
-        });
-
+        throw new Error(
+          "The server did not generate valid payment details."
+        );
       }
 
-      catch (err: any) {
 
-        console.log(
-          "COURSE PAYMENT ERROR:",
-          err?.response?.data ||
-          err?.message
-        );
+      // ================================================
+      // SAVE PAYMENT DETAILS
+      // ================================================
 
+      setPaymentDetails({
+        paymentId: String(payment._id),
 
-        Alert.alert(
+        courseId: String(course._id),
 
-          "Payment Error",
+        courseTitle: String(course.title),
 
-          err?.response?.data?.message ||
+        amount: Number(payment.amount),
 
+        paymentReference:
+          String(payment.paymentReference),
+
+        accountName:
+          String(bankingDetails.accountName),
+
+        bankName:
+          String(bankingDetails.bankName),
+
+        accountNumber:
+          String(bankingDetails.accountNumber),
+
+        branchCode:
+          String(bankingDetails.branchCode),
+
+        accountType:
+          String(
+            bankingDetails.accountType || ""
+          ),
+
+        status:
+          payment.status
+            ? String(payment.status)
+            : undefined,
+
+        proofStatus:
+          payment.proofStatus
+            ? String(payment.proofStatus)
+            : undefined,
+      });
+
+    } catch (err: any) {
+
+      console.error(
+        "COURSE PAYMENT ERROR:",
+        err?.response?.data || err?.message || err
+      );
+
+      Alert.alert(
+        "Payment Error",
+
+        err?.response?.data?.message ||
           err?.message ||
-
           "Failed to generate course payment details."
+      );
 
-        );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      }
 
-      finally {
-
-        setLoading(false);
-
-      }
-
-    };
-
+  // ===================================================
+  // LOAD PAYMENT
+  // ===================================================
 
   useEffect(() => {
-
     createCoursePayment();
+  }, [courseId]);
 
-  }, []);
 
-
-  // ==========================================
+  // ===================================================
   // GO TO PROOF UPLOAD
-  // ==========================================
+  // ===================================================
 
   const handlePaymentMade = () => {
 
     if (!paymentDetails) {
-
       Alert.alert(
         "Error",
         "Payment details are missing."
       );
 
       return;
-
     }
 
 
     router.push({
-
-      pathname:
-        "/(student)/upload-proof" as any,
+      pathname: "/(student)/upload-proof",
 
       params: {
-
         paymentId:
           paymentDetails.paymentId,
+
+        courseId:
+          paymentDetails.courseId,
 
         paymentReference:
           paymentDetails.paymentReference,
@@ -322,23 +275,18 @@ export default function PayCourseScreen() {
           String(paymentDetails.amount),
 
         courseTitle:
-          paymentDetails.courseTitle
-
-      }
-
+          paymentDetails.courseTitle,
+      },
     });
-
   };
 
 
-  // ==========================================
+  // ===================================================
   // LOADING
-  // ==========================================
+  // ===================================================
 
   if (loading) {
-
     return (
-
       <View style={styles.center}>
 
         <ActivityIndicator
@@ -347,133 +295,144 @@ export default function PayCourseScreen() {
         />
 
         <Text style={styles.loadingText}>
-
           Preparing your course payment...
-
         </Text>
 
       </View>
-
     );
-
   }
 
 
-  // ==========================================
+  // ===================================================
   // ERROR
-  // ==========================================
+  // ===================================================
 
   if (!paymentDetails) {
-
     return (
-
       <View style={styles.center}>
 
         <Text style={styles.errorText}>
-
           Failed to load payment details.
-
         </Text>
-
 
         <TouchableOpacity
           style={styles.button}
           onPress={createCoursePayment}
         >
-
           <Text style={styles.buttonText}>
-
             Try Again
-
           </Text>
-
         </TouchableOpacity>
 
       </View>
-
     );
-
   }
 
 
-  // ==========================================
+  // ===================================================
   // PAYMENT SCREEN
-  // ==========================================
+  // ===================================================
+
+  const proofSubmitted =
+    paymentDetails.proofStatus ===
+    "submitted";
+
+  const paymentPaid =
+    paymentDetails.status === "paid";
+
 
   return (
-
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
     >
 
-
       <Text style={styles.title}>
-
         Course Payment
-
       </Text>
-
 
       <Text style={styles.courseTitle}>
-
         {paymentDetails.courseTitle}
-
       </Text>
 
 
-      {/* AMOUNT */}
+      {/* =================================================
+          AMOUNT
+      ================================================= */}
 
       <View style={styles.amountCard}>
 
         <Text style={styles.amountLabel}>
-
           Course Fee
-
         </Text>
-
 
         <Text style={styles.amount}>
-
-          R{paymentDetails.amount}
-
+          R{paymentDetails.amount.toFixed(2)}
         </Text>
 
-
         <Text style={styles.fullPaymentText}>
-
           Full payment required before course access.
-
         </Text>
 
       </View>
 
 
-      {/* REFERENCE */}
+      {/* =================================================
+          PAYMENT STATUS
+      ================================================= */}
+
+      {paymentPaid && (
+        <View style={styles.paidCard}>
+
+          <Text style={styles.paidTitle}>
+            Payment Approved
+          </Text>
+
+          <Text style={styles.paidText}>
+            Your payment has been approved.
+            Your course access should now be available.
+          </Text>
+
+        </View>
+      )}
+
+
+      {proofSubmitted &&
+        !paymentPaid && (
+          <View style={styles.pendingCard}>
+
+            <Text style={styles.pendingTitle}>
+              Proof Submitted
+            </Text>
+
+            <Text style={styles.pendingText}>
+              Your proof of payment has been
+              submitted and is awaiting administrator
+              approval.
+            </Text>
+
+          </View>
+        )}
+
+
+      {/* =================================================
+          REFERENCE
+      ================================================= */}
 
       <View style={styles.referenceCard}>
 
         <Text style={styles.sectionTitle}>
-
           ⚠️ Important Payment Reference
-
         </Text>
-
 
         <Text style={styles.reference}>
-
           {paymentDetails.paymentReference}
-
         </Text>
-
 
         <Text style={styles.referenceInfo}>
-
           Please use this exact reference when
           making your EFT payment.
-
         </Text>
-
 
         <TouchableOpacity
           style={styles.copyButton}
@@ -484,59 +443,45 @@ export default function PayCourseScreen() {
             )
           }
         >
-
           <Text style={styles.copyButtonText}>
-
             Copy Reference
-
           </Text>
-
         </TouchableOpacity>
 
       </View>
 
 
-      {/* BANK DETAILS */}
+      {/* =================================================
+          BANK DETAILS
+      ================================================= */}
 
       <View style={styles.card}>
 
         <Text style={styles.sectionTitle}>
-
           Banking Details
-
         </Text>
 
 
         <Text style={styles.label}>
-
           Account Name
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.accountName}
-
         </Text>
 
 
         <Text style={styles.label}>
-
           Bank
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.bankName}
-
         </Text>
 
 
         <Text style={styles.label}>
-
           Account Number
-
         </Text>
 
         <TouchableOpacity
@@ -547,123 +492,149 @@ export default function PayCourseScreen() {
             )
           }
         >
-
           <Text style={styles.copyValue}>
-
             {paymentDetails.accountNumber}
-
           </Text>
-
         </TouchableOpacity>
 
 
         <Text style={styles.label}>
-
           Branch Code
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.branchCode}
-
         </Text>
 
 
         <Text style={styles.label}>
-
           Account Type
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.accountType}
-
         </Text>
 
       </View>
 
 
-      {/* NEXT STEPS */}
+      {/* =================================================
+          NEXT STEPS
+      ================================================= */}
 
-      <View style={styles.infoCard}>
+      {!paymentPaid && (
+        <View style={styles.infoCard}>
 
-        <Text style={styles.sectionTitle}>
-
-          What Happens Next?
-
-        </Text>
-
-
-        <Text style={styles.infoText}>
-
-          1. Pay the full course fee of R{paymentDetails.amount}.
-
-        </Text>
+          <Text style={styles.sectionTitle}>
+            What Happens Next?
+          </Text>
 
 
-        <Text style={styles.infoText}>
-
-          2. Use the payment reference shown above.
-
-        </Text>
-
-
-        <Text style={styles.infoText}>
-
-          3. Upload your proof of payment.
-
-        </Text>
+          <Text style={styles.infoText}>
+            1. Pay the full course fee of
+            {" "}R{paymentDetails.amount.toFixed(2)}.
+          </Text>
 
 
-        <Text style={styles.infoText}>
-
-          4. Nakky Academy will review your payment.
-
-        </Text>
+          <Text style={styles.infoText}>
+            2. Use the payment reference shown above.
+          </Text>
 
 
-        <Text style={styles.infoText}>
-
-          5. Your course will unlock once payment is approved.
-
-        </Text>
-
-      </View>
+          <Text style={styles.infoText}>
+            3. Upload your proof of payment.
+          </Text>
 
 
-      {/* PAYMENT MADE */}
+          <Text style={styles.infoText}>
+            4. Nakky Academy will review your payment.
+          </Text>
 
-      <TouchableOpacity
-        style={styles.doneButton}
-        onPress={handlePaymentMade}
-      >
 
-        <Text style={styles.doneButtonText}>
+          <Text style={styles.infoText}>
+            5. Your course will unlock once payment
+            is approved.
+          </Text>
 
-          I Have Made the Payment
+        </View>
+      )}
 
-        </Text>
 
-      </TouchableOpacity>
+      {/* =================================================
+          UPLOAD PROOF
+      ================================================= */}
+
+      {!paymentPaid && !proofSubmitted && (
+        <TouchableOpacity
+          style={styles.doneButton}
+          onPress={handlePaymentMade}
+        >
+          <Text style={styles.doneButtonText}>
+            I Have Made the Payment
+          </Text>
+        </TouchableOpacity>
+      )}
+
+
+      {/* =================================================
+          WAITING FOR APPROVAL
+      ================================================= */}
+
+      {proofSubmitted && !paymentPaid && (
+        <View style={styles.waitingContainer}>
+
+          <Text style={styles.waitingText}>
+            Your proof of payment has already been
+            submitted.
+          </Text>
+
+          <Text style={styles.waitingSubtext}>
+            Please wait for Nakky Academy to verify
+            your payment.
+          </Text>
+
+        </View>
+      )}
+
+
+      {/* =================================================
+          PAID
+      ================================================= */}
+
+      {paymentPaid && (
+        <TouchableOpacity
+          style={styles.doneButton}
+          onPress={() =>
+            router.replace({
+              pathname:
+                "/(student)/course-details",
+              params: {
+                id: paymentDetails.courseId,
+              },
+            })
+          }
+        >
+          <Text style={styles.doneButtonText}>
+            Go to Course
+          </Text>
+        </TouchableOpacity>
+      )}
 
 
       <Text style={styles.note}>
-
         You will only receive access to the course
         after Nakky Academy has approved your EFT
         payment.
-
       </Text>
 
-
     </ScrollView>
-
   );
-
 }
 
+
+// =====================================================
+// STYLES
+// =====================================================
 
 const styles = StyleSheet.create({
 
@@ -695,6 +666,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#d32f2f",
     marginBottom: 20,
+    textAlign: "center",
   },
 
   title: {
@@ -733,6 +705,42 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: "#666",
     textAlign: "center",
+  },
+
+  paidCard: {
+    backgroundColor: "#e8f5e9",
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+
+  paidTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+
+  paidText: {
+    color: "#2e7d32",
+    lineHeight: 21,
+  },
+
+  pendingCard: {
+    backgroundColor: "#fff8e1",
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+
+  pendingTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+
+  pendingText: {
+    color: "#665500",
+    lineHeight: 21,
   },
 
   referenceCard: {
@@ -830,12 +838,33 @@ const styles = StyleSheet.create({
     padding: 17,
     borderRadius: 12,
     alignItems: "center",
+    marginBottom: 15,
   },
 
   doneButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+
+  waitingContainer: {
+    backgroundColor: "#f5f5f5",
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 15,
+  },
+
+  waitingText: {
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  waitingSubtext: {
+    textAlign: "center",
+    color: "#777",
+    marginTop: 6,
+    lineHeight: 20,
   },
 
   note: {

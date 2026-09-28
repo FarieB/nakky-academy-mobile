@@ -1,7 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { fetch as expoFetch } from "expo/fetch";
+
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -1113,156 +1116,186 @@ export default function EditCourseScreen() {
     return true;
   };
 
-  /* =======================================================
-     UPLOAD MATERIAL
-  ======================================================= */
+/* =======================================================
+   UPLOAD MATERIAL
+======================================================= */
 
-  const uploadMaterial = async (
-    moduleIndex: number,
-    lessonIndex: number,
-    materialKind: "pdf" | "audio"
-  ) => {
-    if (
-      !ensureSavedBeforeUpload(
-        moduleIndex,
-        lessonIndex
-      )
-    ) {
+const uploadMaterial = async (
+  moduleId: string,
+  lessonId: string,
+  type: "pdf" | "audio"
+) => {
+  try {
+    console.log("======================================");
+    console.log("STARTING MATERIAL UPLOAD");
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: type === "pdf" ? "application/pdf" : "audio/*",
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      console.log("FILE SELECTION CANCELLED");
       return;
     }
 
-    const module =
-      course!.modules[moduleIndex];
+    const asset = result.assets[0];
 
-    const lesson =
-      module.lessons[lessonIndex];
+    console.log("FILES SELECTED:", result.assets.length);
+    console.log("--------------------------------------");
+    console.log("UPLOADING FILE");
+    console.log("URI:", asset.uri);
+    console.log("NAME:", asset.name);
+    console.log("MIME:", asset.mimeType);
+    console.log("SIZE:", asset.size);
+
+    // --------------------------------------------------
+    // CREATE EXPO FILE DIRECTLY FROM PICKER URI
+    // --------------------------------------------------
+
+    const file = new File(asset.uri);
+
+    console.log("EXPO FILE CREATED:", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      uri: file.uri,
+    });
+
+    // --------------------------------------------------
+    // CREATE FORM DATA
+    // --------------------------------------------------
+
+    const formData = new FormData();
+
+    formData.append("material", file);
+
+    console.log("FORM DATA CREATED");
+
+    // --------------------------------------------------
+    // UPLOAD URL
+    // --------------------------------------------------
+
+    const uploadUrl =
+      `${API.defaults.baseURL}` +
+      `/courses/${courseId}` +
+      `/modules/${moduleId}` +
+      `/lessons/${lessonId}` +
+      `/material`;
+
+    console.log("UPLOAD URL:", uploadUrl);
+
+    // --------------------------------------------------
+    // AUTH TOKEN
+    // --------------------------------------------------
+
+    const token = await AsyncStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("Authentication token not found.");
+    }
+
+    // --------------------------------------------------
+    // UPLOAD
+    // --------------------------------------------------
+
+    console.log("STARTING FETCH...");
+
+    const response = await expoFetch(uploadUrl, {
+      method: "POST",
+
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+
+      body: formData,
+    });
+
+    console.log("UPLOAD RESPONSE STATUS:", response.status);
+
+    const responseText = await response.text();
+
+    console.log("UPLOAD RESPONSE:", responseText);
+
+    let data: any;
 
     try {
-      const result =
-        await DocumentPicker.getDocumentAsync({
-          type:
-            materialKind === "pdf"
-              ? "application/pdf"
-              : [
-                  "audio/mpeg",
-                  "audio/mp3",
-                  "audio/wav",
-                  "audio/x-wav",
-                  "audio/mp4",
-                  "audio/aac",
-                  "audio/ogg",
-                  "audio/webm",
-                  "audio/flac",
-                ],
-          multiple: true,
-          copyToCacheDirectory: true,
-        });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const assets = result.assets || [];
-
-      if (assets.length === 0) {
-        return;
-      }
-
-      const key =
-        `${module._id}-${lesson._id}-${materialKind}`;
-
-      setUploadingKey(key);
-
-      const token =
-        await AsyncStorage.getItem("token");
-
-      if (!token) {
-        throw new Error(
-          "Authentication token is missing."
-        );
-      }
-
-      let latestCourse: any = null;
-
-      for (const asset of assets) {
-        const formData = new FormData();
-
-        formData.append(
-          "material",
-          {
-            uri: asset.uri,
-            name:
-              asset.name ||
-              `material-${Date.now()}`,
-            type:
-              asset.mimeType ||
-              (materialKind === "pdf"
-                ? "application/pdf"
-                : "audio/mpeg"),
-          } as any
-        );
-
-        formData.append(
-          "title",
-          asset.name || ""
-        );
-
-        /*
-         * IMPORTANT:
-         * Do NOT manually set Content-Type here.
-         * Axios/React Native will generate the correct
-         * multipart boundary automatically.
-         */
-
-        const response = await API.post(
-          `/courses/${courseId}/modules/${module._id}/lessons/${lesson._id}/material`,
-          formData,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data = response.data;
-
-        latestCourse =
-          data.course || data;
-      }
-
-      if (latestCourse) {
-        setCourse(
-          normalizeCourse(latestCourse)
-        );
-      } else {
-        await loadCourse();
-      }
-
-      Alert.alert(
-        "Upload Complete",
-        `${assets.length} ${materialKind}${
-          assets.length === 1 ? "" : "s"
-        } uploaded successfully.`
-      );
-    } catch (error: any) {
-      console.error(
-        "UPLOAD MATERIAL ERROR:",
-        error
-      );
-
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Unable to upload the material.";
-
-      Alert.alert(
-        "Upload Error",
-        message
-      );
-    } finally {
-      setUploadingKey(null);
+      data = JSON.parse(responseText);
+    } catch {
+      data = {
+        message: responseText,
+      };
     }
-  };
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+          `Upload failed with status ${response.status}`
+      );
+    }
+
+    console.log("MATERIAL UPLOAD SUCCESSFUL");
+
+    // --------------------------------------------------
+    // UPDATE COURSE STATE
+    // --------------------------------------------------
+
+    setCourse((prev: Course | null) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+
+        modules: prev.modules.map((module: Module) => {
+          if (module._id !== moduleId) {
+            return module;
+          }
+
+          return {
+            ...module,
+
+            lessons: module.lessons.map((lesson: Lesson) => {
+              if (lesson._id !== lessonId) {
+                return lesson;
+              }
+
+              return {
+                ...lesson,
+
+                materials: [
+                  ...(lesson.materials || []),
+                  data.material,
+                ],
+              };
+            }),
+          };
+        }),
+      };
+    });
+
+    Alert.alert(
+      "Upload Successful",
+      `${asset.name} was uploaded successfully.`
+    );
+
+    console.log("======================================");
+  } catch (error: any) {
+    console.error("======================================");
+    console.error("UPLOAD MATERIAL ERROR:", error);
+    console.error(
+      "ERROR MESSAGE:",
+      error?.message
+    );
+    console.error("======================================");
+
+    Alert.alert(
+      "Upload Failed",
+      error?.message ||
+        "Something went wrong while uploading the material."
+    );
+  }
+};
 
   /* =======================================================
      DELETE MATERIAL
@@ -1363,134 +1396,307 @@ export default function EditCourseScreen() {
     );
   };
 
-  /* =======================================================
-     UPLOAD VIDEO
-  ======================================================= */
+/* =======================================================
+   UPLOAD VIDEO
+======================================================= */
 
-  const uploadVideo = async (
-    moduleIndex: number,
-    lessonIndex: number
-  ) => {
-    if (
-      !ensureSavedBeforeUpload(
-        moduleIndex,
-        lessonIndex
-      )
-    ) {
+const uploadVideo = async (
+  moduleIndex: number,
+  lessonIndex: number
+) => {
+  if (
+    !ensureSavedBeforeUpload(
+      moduleIndex,
+      lessonIndex
+    )
+  ) {
+    return;
+  }
+
+  const module =
+    course!.modules[moduleIndex];
+
+  const lesson =
+    module.lessons[lessonIndex];
+
+  try {
+    console.log("======================================");
+    console.log("STARTING VIDEO UPLOAD");
+
+    const result =
+      await DocumentPicker.getDocumentAsync({
+        type: [
+          "video/mp4",
+          "video/mpeg",
+          "video/quicktime",
+          "video/x-msvideo",
+          "video/x-matroska",
+          "video/webm",
+        ],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+    if (result.canceled) {
+      console.log(
+        "USER CANCELLED VIDEO PICKER"
+      );
       return;
     }
 
-    const module =
-      course!.modules[moduleIndex];
+    const asset =
+      result.assets?.[0];
 
-    const lesson =
-      module.lessons[lessonIndex];
-
-    try {
-      const result =
-        await DocumentPicker.getDocumentAsync({
-          type: [
-            "video/mp4",
-            "video/mpeg",
-            "video/quicktime",
-            "video/x-msvideo",
-            "video/x-matroska",
-            "video/webm",
-          ],
-          multiple: false,
-          copyToCacheDirectory: true,
-        });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const asset = result.assets?.[0];
-
-      if (!asset) {
-        return;
-      }
-
-      const key =
-        `${module._id}-${lesson._id}-video`;
-
-      setUploadingKey(key);
-
-      const token =
-        await AsyncStorage.getItem("token");
-
-      if (!token) {
-        throw new Error(
-          "Authentication token is missing."
-        );
-      }
-
-      const formData = new FormData();
-
-      formData.append(
-        "video",
-        {
-          uri: asset.uri,
-          name:
-            asset.name ||
-            `video-${Date.now()}.mp4`,
-          type:
-            asset.mimeType ||
-            "video/mp4",
-        } as any
+    if (!asset) {
+      console.log(
+        "NO VIDEO SELECTED"
       );
+      return;
+    }
 
-      formData.append(
-        "title",
-        asset.name || lesson.title
+    console.log(
+      "--------------------------------------"
+    );
+
+    console.log(
+      "UPLOADING VIDEO"
+    );
+
+    console.log(
+      "URI:",
+      asset.uri
+    );
+
+    console.log(
+      "NAME:",
+      asset.name
+    );
+
+    console.log(
+      "MIME:",
+      asset.mimeType
+    );
+
+    console.log(
+      "SIZE:",
+      asset.size
+    );
+
+    const key =
+      `${module._id}-${lesson._id}-video`;
+
+    setUploadingKey(key);
+
+    const token =
+      await AsyncStorage.getItem("token");
+
+    if (!token) {
+      throw new Error(
+        "Authentication token is missing."
       );
+    }
 
-      /*
-       * IMPORTANT:
-       * Do NOT manually set Content-Type here.
-       */
+    /*
+     * --------------------------------------------------
+     * Create an Expo File object.
+     * --------------------------------------------------
+     */
+    const file =
+      new File(asset.uri);
 
-      const response = await API.post(
-        `/courses/${courseId}/modules/${module._id}/lessons/${lesson._id}/video`,
-        formData,
+    console.log(
+      "EXPO VIDEO FILE:",
+      {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      }
+    );
+
+    const formData =
+      new FormData();
+
+    /*
+     * IMPORTANT:
+     *
+     * The backend expects:
+     *
+     * videoUpload.single("video")
+     *
+     * Therefore the FormData field MUST be "video".
+     */
+    formData.append(
+      "video",
+      file
+    );
+
+    formData.append(
+      "title",
+      asset.name ||
+        lesson.title
+    );
+
+    console.log(
+      "VIDEO FORM DATA CREATED"
+    );
+
+    const uploadUrl =
+      `${API.defaults.baseURL}` +
+      `/courses/${courseId}` +
+      `/modules/${module._id}` +
+      `/lessons/${lesson._id}` +
+      `/video`;
+
+    console.log(
+      "VIDEO UPLOAD URL:",
+      uploadUrl
+    );
+
+    /*
+     * IMPORTANT:
+     *
+     * Do NOT manually specify:
+     *
+     * Content-Type:
+     * multipart/form-data
+     *
+     * Expo generates the multipart boundary.
+     */
+
+    const response =
+      await expoFetch(
+        uploadUrl,
         {
+          method: "POST",
+
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization:
+              `Bearer ${token}`,
           },
+
+          body: formData,
         }
       );
 
-      const data = response.data;
+    console.log(
+      "VIDEO HTTP STATUS:",
+      response.status
+    );
 
+    const responseText =
+      await response.text();
+
+    console.log(
+      "VIDEO SERVER RESPONSE:",
+      responseText
+    );
+
+    if (!response.ok) {
+      let errorMessage =
+        "Video upload failed.";
+
+      try {
+        const errorData =
+          JSON.parse(
+            responseText
+          );
+
+        errorMessage =
+          errorData.message ||
+          errorMessage;
+      } catch {
+        if (responseText) {
+          errorMessage =
+            responseText;
+        }
+      }
+
+      throw new Error(
+        errorMessage
+      );
+    }
+
+    let data: any = {};
+
+    try {
+      data =
+        JSON.parse(
+          responseText
+        );
+    } catch {
+      console.warn(
+        "Video server response was not valid JSON."
+      );
+    }
+
+    console.log(
+      "VIDEO UPLOAD SUCCESS:",
+      data
+    );
+
+    /*
+     * Update the course with the response
+     * if the backend returns the updated course.
+     */
+    if (data.course || data._id) {
       setCourse(
         normalizeCourse(
           data.course || data
         )
       );
-
-      Alert.alert(
-        "Video Uploaded",
-        "The lesson video has been uploaded successfully."
-      );
-    } catch (error: any) {
-      console.error(
-        "UPLOAD VIDEO ERROR:",
-        error
-      );
-
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        "Unable to upload the video.";
-
-      Alert.alert(
-        "Video Upload Error",
-        message
-      );
-    } finally {
-      setUploadingKey(null);
+    } else {
+      await loadCourse();
     }
-  };
+
+    console.log(
+      "======================================"
+    );
+
+    console.log(
+      "VIDEO UPLOAD COMPLETE"
+    );
+
+    console.log(
+      "======================================"
+    );
+
+    Alert.alert(
+      "Video Uploaded",
+      "The lesson video has been uploaded successfully."
+    );
+
+  } catch (error: any) {
+    console.error(
+      "======================================"
+    );
+
+    console.error(
+      "UPLOAD VIDEO ERROR:",
+      error
+    );
+
+    console.error(
+      "ERROR MESSAGE:",
+      error?.message
+    );
+
+    console.error(
+      "======================================"
+    );
+
+    const message =
+      error?.message ||
+      "Unable to upload the video.";
+
+    Alert.alert(
+      "Video Upload Error",
+      message
+    );
+
+  } finally {
+    setUploadingKey(null);
+  }
+};
 
   /* =======================================================
      COURSE STATISTICS
@@ -2197,8 +2403,8 @@ export default function EditCourseScreen() {
                             }
                             onPress={() =>
                               uploadMaterial(
-                                moduleIndex,
-                                lessonIndex,
+                                module._id!,
+                                lesson._id!,
                                 "pdf"
                               )
                             }
@@ -2232,8 +2438,8 @@ export default function EditCourseScreen() {
                             }
                             onPress={() =>
                               uploadMaterial(
-                                moduleIndex,
-                                lessonIndex,
+                                module._id!,
+                                lesson._id!,
                                 "audio"
                               )
                             }

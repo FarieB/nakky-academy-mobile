@@ -11,15 +11,21 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {
+   "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "package": "com.anonymous.nakkyacademymobile"
     },
     "web": {
       "output": "static",
@@ -43,7 +49,9 @@
       "expo-web-browser",
       "expo-video",
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sharing",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

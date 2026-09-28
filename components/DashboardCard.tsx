@@ -11,12 +11,19 @@ export default function DashboardCard({
   value,
   children,
 }: Props) {
+  const displayValue =
+    value !== undefined && value !== null
+      ? typeof value === "object"
+        ? ""
+        : String(value)
+      : "";
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{title}</Text>
 
-      {value !== undefined && (
-        <Text style={styles.value}>{value}</Text>
+      {displayValue !== "" && (
+        <Text style={styles.value}>{displayValue}</Text>
       )}
 
       {children}

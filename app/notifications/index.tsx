@@ -229,15 +229,11 @@ useEffect(() => {
                     break;
 
                   case "open_course":
-                    router.push(
-                      "/student/my-courses"
-                    );
+                   router.push("/student/courses");
                     break;
 
                   case "open_certificate":
-                    router.push(
-                      "/student/certificates"
-                    );
+                    router.push("/student/courses");
                     break;
 
                   default:

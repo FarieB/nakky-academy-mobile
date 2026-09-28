@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +13,12 @@ import {
   View,
 } from "react-native";
 
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { File, Paths } from "expo-file-system";
 import { VideoView, useVideoPlayer } from "expo-video";
+import Pdf from "react-native-pdf";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://192.168.110.120:5000/api";
 
 type Material = {
   _id?: string;
@@ -52,6 +56,23 @@ type Assignment = {
   questions?: any[];
 };
 
+type ModuleProgression = {
+  unlocked?: boolean;
+  lessonsCompleted?: boolean;
+  lessonsTotal?: number;
+  assignmentEnabled?: boolean;
+  assignmentStatus?:
+    | "not_started"
+    | "pending_review"
+    | "passed"
+    | "failed"
+    | "not_required";
+  assignmentAvailable?: boolean;
+  moduleCompleted?: boolean;
+  attempts?: number;
+  percentage?: number;
+};
+
 type Module = {
   _id?: string;
   title?: string;
@@ -59,6 +80,7 @@ type Module = {
   order?: number;
   lessons?: Lesson[];
   assignment?: Assignment;
+  progression?: ModuleProgression;
 };
 
 type Course = {
@@ -75,7 +97,27 @@ type Course = {
     durationMinutes?: number;
     passMark?: number;
     questions?: any[];
+    progression?: {
+      unlocked?: boolean;
+      status?:
+        | "not_started"
+        | "pending_review"
+        | "passed"
+        | "failed";
+    };
   };
+};
+
+type LessonProgress = {
+  lessonId?: string;
+  materialsCompleted?: {
+    materialId?: string;
+    completedAt?: string;
+  }[];
+  uploadedVideoCompleted?: boolean;
+  uploadedVideoCompletedAt?: string | null;
+  externalVideoCompleted?: boolean;
+  externalVideoCompletedAt?: string | null;
 };
 
 type Enrollment = {
@@ -86,6 +128,7 @@ type Enrollment = {
     lessonId?: string;
     completedAt?: string;
   }[];
+  lessonProgress?: LessonProgress[];
   lastAccessed?: string;
 };
 
@@ -109,12 +152,30 @@ export default function LessonPlayer() {
 
   const [loading, setLoading] = useState(true);
   const [markingComplete, setMarkingComplete] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  const [audioSource, setAudioSource] = useState<{
+      uri: string;
+      headers: Record<string, string>;
+    } | null>(null);
 
   const [currentModuleIndex, setCurrentModuleIndex] =
     useState(moduleIndexParam);
 
   const [currentLessonIndex, setCurrentLessonIndex] =
     useState(lessonIndexParam);
+
+  const [pdfUri, setPdfUri] =
+  useState<string | null>(null);
+
+  const [pdfTitle, setPdfTitle] =
+    useState("Course Material");
+
+  const [pdfVisible, setPdfVisible] =
+    useState(false);
+
+  const [pdfMaterialId, setPdfMaterialId] =
+  useState<string | null>(null);
 
   /*
    * =========================================================
@@ -183,6 +244,8 @@ export default function LessonPlayer() {
         return;
       }
 
+      setAuthToken(token);
+
       const response = await fetch(
         `${API_URL}/courses/${courseId}/content`,
         {
@@ -196,9 +259,26 @@ export default function LessonPlayer() {
 
       const data = await response.json();
 
+      if (response.status === 403) {
+        Alert.alert(
+          "Payment Verification in Progress",
+          "Your payment has been submitted successfully and is currently awaiting approval by Nakky Academy administration. Access to this course will be granted as soon as your payment is approved.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.back(),
+            },
+          ]
+        );
+
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(
-          data?.message || data?.error || "Unable to load course."
+          data?.message ||
+            data?.error ||
+            "Unable to load course."
         );
       }
 
@@ -213,7 +293,7 @@ export default function LessonPlayer() {
        * or simply the course object.
        */
 
-      const loadedCourse: Course =
+      const loadedCourseData =
         data?.course ||
         data?.data?.course ||
         data;
@@ -223,6 +303,19 @@ export default function LessonPlayer() {
         data?.data?.enrollment ||
         data?.enrollmentData ||
         null;
+
+      // IMPORTANT:
+      // The backend returns modules separately from `course`.
+      // Put them back onto the course object so the lesson player
+      // can access the actual lesson content.
+      const loadedCourse: Course = {
+        ...loadedCourseData,
+        modules:
+          data?.modules ||
+          data?.data?.modules ||
+          loadedCourseData?.modules ||
+          [],
+      };
 
       setCourse(loadedCourse);
       setEnrollment(loadedEnrollment);
@@ -304,6 +397,125 @@ export default function LessonPlayer() {
     ? completedLessonIds.has(lessonId)
     : false;
 
+  const currentLessonProgress = useMemo(() => {
+    if (!lessonId) {
+      return null;
+    }
+
+    return (
+      enrollment?.lessonProgress?.find(
+        (item) =>
+          String(item.lessonId) ===
+          String(lessonId)
+      ) || null
+    );
+  }, [enrollment, lessonId]);
+
+  const requiredMaterials =
+    currentLesson?.materials || [];
+
+  const completedMaterialIds = new Set(
+    (
+      currentLessonProgress?.materialsCompleted ||
+      []
+    )
+      .map((item) => item?.materialId)
+      .filter(Boolean)
+      .map((id) => String(id))
+  );
+
+  const uploadedVideoRequired =
+    currentLesson?.video?.type === "upload" ||
+    (
+      !!currentLesson?.videoUrl &&
+      !currentLesson.videoUrl.startsWith("http")
+    );
+
+  const externalVideoRequired =
+    currentLesson?.video?.type === "external" ||
+    (
+      !!currentLesson?.videoUrl &&
+      (
+        currentLesson.videoUrl.startsWith("http://") ||
+        currentLesson.videoUrl.startsWith("https://")
+      )
+    );
+
+  const allMaterialsCompleted =
+    requiredMaterials.every(
+      (material) =>
+        material._id &&
+        completedMaterialIds.has(
+          String(material._id)
+        )
+    );
+
+  const allLearningItemsCompleted =
+    allMaterialsCompleted &&
+    (
+      !uploadedVideoRequired ||
+      currentLessonProgress?.uploadedVideoCompleted === true
+    ) &&
+    (
+      !externalVideoRequired ||
+      currentLessonProgress?.externalVideoCompleted === true
+    );
+
+  /*
+   * =========================================================
+   * MODULE / ASSIGNMENT PROGRESSION HELPERS
+   * =========================================================
+   */
+
+  const getModuleProgression = (
+    module?: Module
+  ): ModuleProgression => {
+    return (
+      module?.progression || {
+        unlocked: false,
+        lessonsCompleted: false,
+        lessonsTotal: module?.lessons?.length || 0,
+        assignmentEnabled:
+          module?.assignment?.enabled === true,
+        assignmentStatus:
+          module?.assignment?.enabled === true
+            ? "not_started"
+            : "not_required",
+        assignmentAvailable: false,
+        moduleCompleted: false,
+        attempts: 0,
+        percentage: 0,
+      }
+    );
+  };
+
+  const getAssignmentStatusText = (
+    module?: Module
+  ) => {
+    const progression = getModuleProgression(module);
+
+    if (!progression.assignmentEnabled) {
+      return "No assignment required";
+    }
+
+    switch (progression.assignmentStatus) {
+      case "passed":
+        return "Assignment Passed";
+
+      case "failed":
+        return "Assignment Failed";
+
+      case "pending_review":
+        return "Under Review";
+
+      case "not_started":
+      default:
+        return progression.assignmentAvailable
+          ? "Assignment Available"
+          : "Assignment Locked";
+    }
+  };
+
   /*
    * =========================================================
    * VIDEO
@@ -314,23 +526,15 @@ export default function LessonPlayer() {
     if (!currentLesson) return null;
 
     /*
-     * New structure:
-     *
-     * lesson.video.type
-     * lesson.video.url
-     * lesson.video.filename
+     * EXTERNAL VIDEO
      */
-
     if (currentLesson.video?.type === "external") {
       return currentLesson.video.url || null;
     }
 
     /*
-     * Legacy structure:
-     *
-     * lesson.videoUrl
+     * LEGACY EXTERNAL VIDEO
      */
-
     if (
       currentLesson.videoUrl &&
       (
@@ -342,12 +546,8 @@ export default function LessonPlayer() {
     }
 
     /*
-     * Uploaded video.
-     *
-     * The backend protects this endpoint using the student's
-     * authenticated enrollment.
+     * UPLOADED VIDEO
      */
-
     const filename =
       currentLesson.video?.filename ||
       (
@@ -362,12 +562,23 @@ export default function LessonPlayer() {
           : null
       );
 
-    if (!filename) return null;
+    if (!filename || !authToken) {
+      return null;
+    }
 
-    return `${API_URL}/courses/${courseId}/video/${encodeURIComponent(
-      filename
-    )}`;
-  }, [currentLesson, courseId]);
+    return {
+      uri: `${API_URL}/courses/${courseId}/video/${encodeURIComponent(
+        filename
+      )}`,
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    };
+  }, [
+    currentLesson,
+    courseId,
+    authToken,
+  ]);
 
   /*
    * expo-video player
@@ -378,6 +589,22 @@ export default function LessonPlayer() {
   const player = useVideoPlayer(videoSource, (player) => {
     player.loop = false;
   });
+
+  /*
+ * =========================================================
+ * AUDIO PLAYER
+ * =========================================================
+ */
+
+const audioPlayer = useAudioPlayer(
+  audioSource,
+  {
+    updateInterval: 500,
+  }
+);
+
+const audioStatus =
+  useAudioPlayerStatus(audioPlayer);
 
   /*
    * =========================================================
@@ -432,12 +659,16 @@ export default function LessonPlayer() {
       currentLesson?.videoUrl;
 
     if (!url) {
-      Alert.alert("Video unavailable", "No video link is available.");
+      Alert.alert(
+        "Video unavailable",
+        "No video link is available."
+      );
       return;
     }
 
     try {
-      const supported = await Linking.canOpenURL(url);
+      const supported =
+        await Linking.canOpenURL(url);
 
       if (!supported) {
         Alert.alert(
@@ -448,6 +679,25 @@ export default function LessonPlayer() {
       }
 
       await Linking.openURL(url);
+
+      Alert.alert(
+        "Video Lesson",
+        "After watching the video, select OK to record this video as completed.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Mark as Watched",
+            onPress: async () => {
+              await markVideoCompleted(
+                "external"
+              );
+            },
+          },
+        ]
+      );
     } catch (error) {
       Alert.alert(
         "Unable to Open Video",
@@ -458,60 +708,440 @@ export default function LessonPlayer() {
 
   /*
    * =========================================================
-   * OPEN MATERIAL
+   * RECORD UPLOADED VIDEO COMPLETION ON PLAYBACK END
    * =========================================================
-   *
-   * IMPORTANT:
-   *
-   * Material endpoints are protected by authentication.
-   *
-   * We therefore do not pretend that Linking.openURL()
-   * will automatically attach the Bearer token.
-   *
-   * For now, the user gets a clear message instead of a
-   * broken PDF/audio link.
-   *
-   * The secure material viewer/download flow can be added
-   * once the material endpoint is finalised.
    */
 
-  const openMaterial = async (material: Material) => {
-    if (!material) return;
-
-    /*
-     * If a future backend supplies a public URL, allow it.
-     */
-
-    const publicUrl =
-      (material as any).url ||
-      (material as any).fileUrl;
-
+  useEffect(() => {
     if (
-      publicUrl &&
-      (
-        publicUrl.startsWith("http://") ||
-        publicUrl.startsWith("https://")
-      )
+      !player ||
+      !currentLesson ||
+      !uploadedVideoRequired
     ) {
-      try {
-        await Linking.openURL(publicUrl);
-      } catch {
-        Alert.alert(
-          "Unable to Open",
-          "The material could not be opened."
+      return;
+    }
+
+    const subscription =
+      player.addListener(
+        "playToEnd",
+        async () => {
+          await markVideoCompleted(
+            "uploaded"
+          );
+        }
+      );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [
+    player,
+    currentLesson,
+    uploadedVideoRequired,
+    lessonId,
+  ]);
+
+  /*
+   * =========================================================
+   * MARK MATERIAL COMPLETE
+   * =========================================================
+   */
+
+  const markMaterialCompleted = async (
+    materialId: string
+  ) => {
+    if (!courseId || !lessonId) return;
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) return;
+
+      const response = await fetch(
+        `${API_URL}/courses/${courseId}/material-progress`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            lessonId,
+            materialId,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            "Unable to save material progress."
         );
       }
+
+      setEnrollment((previous) => {
+        if (!previous) return previous;
+
+        const existingProgress =
+          previous.lessonProgress || [];
+
+        const existingLessonProgress =
+          existingProgress.find(
+            (item) =>
+              String(item.lessonId) ===
+              String(lessonId)
+          );
+
+        if (!existingLessonProgress) {
+          return {
+            ...previous,
+            lessonProgress: [
+              ...existingProgress,
+              {
+                lessonId,
+                materialsCompleted: [
+                  {
+                    materialId,
+                    completedAt:
+                      new Date().toISOString(),
+                  },
+                ],
+                uploadedVideoCompleted: false,
+                externalVideoCompleted: false,
+              },
+            ],
+          };
+        }
+
+        const existingMaterials =
+          existingLessonProgress.materialsCompleted ||
+          [];
+
+        if (
+          existingMaterials.some(
+            (item) =>
+              String(item.materialId) ===
+              String(materialId)
+          )
+        ) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          lessonProgress:
+            existingProgress.map((item) =>
+              String(item.lessonId) ===
+              String(lessonId)
+                ? {
+                    ...item,
+                    materialsCompleted: [
+                      ...existingMaterials,
+                      {
+                        materialId,
+                        completedAt:
+                          new Date().toISOString(),
+                      },
+                    ],
+                  }
+                : item
+            ),
+        };
+      });
+
+      return data;
+    } catch (error) {
+      console.error(
+        "Material progress error:",
+        error
+      );
+    }
+  };
+
+  /*
+   * =========================================================
+   * MARK VIDEO COMPLETE
+   * =========================================================
+   */
+
+  const markVideoCompleted = async (
+    videoType: "uploaded" | "external"
+  ) => {
+    if (!courseId || !lessonId) return;
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) return;
+
+      const response = await fetch(
+        `${API_URL}/courses/${courseId}/video-progress`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            lessonId,
+            videoType,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            "Unable to save video progress."
+        );
+      }
+
+      setEnrollment((previous) => {
+        if (!previous) return previous;
+
+        const existingProgress =
+          previous.lessonProgress || [];
+
+        const existingLessonProgress =
+          existingProgress.find(
+            (item) =>
+              String(item.lessonId) ===
+              String(lessonId)
+          );
+
+        const now =
+          new Date().toISOString();
+
+        if (!existingLessonProgress) {
+          return {
+            ...previous,
+            lessonProgress: [
+              ...existingProgress,
+              {
+                lessonId,
+                materialsCompleted: [],
+                uploadedVideoCompleted:
+                  videoType === "uploaded",
+                uploadedVideoCompletedAt:
+                  videoType === "uploaded"
+                    ? now
+                    : null,
+                externalVideoCompleted:
+                  videoType === "external",
+                externalVideoCompletedAt:
+                  videoType === "external"
+                    ? now
+                    : null,
+              },
+            ],
+          };
+        }
+
+        return {
+          ...previous,
+          lessonProgress:
+            existingProgress.map((item) =>
+              String(item.lessonId) ===
+              String(lessonId)
+                ? {
+                    ...item,
+                    uploadedVideoCompleted:
+                      videoType === "uploaded"
+                        ? true
+                        : item.uploadedVideoCompleted,
+                    uploadedVideoCompletedAt:
+                      videoType === "uploaded"
+                        ? now
+                        : item.uploadedVideoCompletedAt,
+                    externalVideoCompleted:
+                      videoType === "external"
+                        ? true
+                        : item.externalVideoCompleted,
+                    externalVideoCompletedAt:
+                      videoType === "external"
+                        ? now
+                        : item.externalVideoCompletedAt,
+                  }
+                : item
+            ),
+        };
+      });
+
+      return data;
+    } catch (error) {
+      console.error(
+        "Video progress error:",
+        error
+      );
+    }
+  };
+
+  /*
+   * =========================================================
+   * OPEN PROTECTED MATERIAL
+   * =========================================================
+   *
+   * PDF/audio files are protected by the backend.
+   *
+   * The file is downloaded using the authenticated
+   * Bearer token, saved temporarily, then opened through
+   * the device's native file-sharing/opening system.
+   */
+
+  const openMaterial = async (
+  material: Material
+) => {
+  if (!material?.filename || !courseId) {
+    Alert.alert(
+      "Material Unavailable",
+      "This material does not have a valid file."
+    );
+    return;
+  }
+
+  try {
+    const token =
+      await AsyncStorage.getItem("token");
+
+    if (!token) {
+      Alert.alert(
+        "Session Expired",
+        "Please log in again."
+      );
+
+      router.replace("/login");
+      return;
+    }
+
+    const safeFilename =
+      material.filename.split("/").pop();
+
+    if (!safeFilename) {
+      throw new Error(
+        "Invalid material filename."
+      );
+    }
+
+    const materialUrl =
+      `${API_URL}/courses/${courseId}/material/${encodeURIComponent(
+        safeFilename
+      )}`;
+
+    /*
+     * =====================================================
+     * AUDIO
+     * =====================================================
+     *
+     * Audio stays inside Nakky Academy.
+     */
+
+    const isAudio =
+      material.type === "audio" ||
+      !!material.mimeType?.startsWith(
+        "audio/"
+      );
+
+    if (isAudio) {
+      setAudioSource({
+        uri: materialUrl,
+        headers: {
+          Authorization:
+            `Bearer ${token}`,
+        },
+      });
+
+      audioPlayer.play();
+
+      await markMaterialCompleted(
+        String(material._id)
+      );
 
       return;
     }
 
-    Alert.alert(
-      material.type === "audio"
-        ? "Audio Material"
-        : "PDF Material",
-      "This course material is protected and requires authenticated access. The secure material viewer will open it once the material endpoint is connected."
+    /*
+     * =====================================================
+     * PDF
+     * =====================================================
+     *
+     * Download the protected PDF locally.
+     * The PDF viewer will display the local file
+     * inside Nakky Academy.
+     */
+
+    const extension =
+      safeFilename.includes(".")
+        ? safeFilename
+            .split(".")
+            .pop()
+            ?.toLowerCase()
+        : "pdf";
+
+    const fileName =
+      `nakky-${courseId}-${material._id || Date.now()}.${extension}`;
+
+    const destination =
+      new File(
+        Paths.cache,
+        fileName
+      );
+
+    const downloadedFile =
+      await File.downloadFileAsync(
+        materialUrl,
+        destination,
+        {
+          headers: {
+            Authorization:
+              `Bearer ${token}`,
+          },
+
+          idempotent: true,
+        }
+      );
+
+    if (!downloadedFile.exists) {
+      throw new Error(
+        "The PDF could not be downloaded."
+      );
+    }
+
+    /*
+     * Save the local PDF URI in state.
+     *
+     * We will use this with the in-app PDF viewer.
+     */
+
+    setPdfUri(downloadedFile.uri);
+
+      setPdfTitle(
+        material.originalName ||
+          "Course Material"
+      );
+
+      setPdfMaterialId(
+        String(material._id)
+      );
+
+      setPdfVisible(true);
+
+  } catch (error: any) {
+    console.error(
+      "Material access error:",
+      error
     );
-  };
+
+    Alert.alert(
+      "Unable to Open Material",
+      error?.message ||
+        "The course material could not be opened."
+    );
+  }
+};
 
   /*
    * =========================================================
@@ -533,10 +1163,19 @@ export default function LessonPlayer() {
       return;
     }
 
+    if (!allLearningItemsCompleted) {
+      Alert.alert(
+        "Lesson Not Complete",
+        "Please open and complete all required learning materials and watch the required video before completing this lesson."
+      );
+      return;
+    }
+
     try {
       setMarkingComplete(true);
 
-      const token = await AsyncStorage.getItem("token");
+      const token =
+        await AsyncStorage.getItem("token");
 
       if (!token) {
         Alert.alert(
@@ -567,31 +1206,40 @@ export default function LessonPlayer() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-          data?.error ||
-          "Unable to update lesson progress."
+            data?.error ||
+            "Unable to update lesson progress."
         );
       }
-
-      /*
-       * Update local enrollment immediately.
-       */
 
       setEnrollment((previous) => {
         if (!previous) {
           return {
             progress: data?.progress || 0,
-            completed: data?.completed || false,
+            completed:
+              data?.completed || false,
             lessonsCompleted: [
               {
                 lessonId,
-                completedAt: new Date().toISOString(),
+                completedAt:
+                  new Date().toISOString(),
               },
             ],
+            lessonProgress: [],
           };
         }
 
         const existing =
           previous.lessonsCompleted || [];
+
+        if (
+          existing.some(
+            (item) =>
+              String(item.lessonId) ===
+              String(lessonId)
+          )
+        ) {
+          return previous;
+        }
 
         return {
           ...previous,
@@ -607,7 +1255,8 @@ export default function LessonPlayer() {
             ...existing,
             {
               lessonId,
-              completedAt: new Date().toISOString(),
+              completedAt:
+                new Date().toISOString(),
             },
           ],
         };
@@ -624,7 +1273,10 @@ export default function LessonPlayer() {
         ]
       );
     } catch (error: any) {
-      console.error("Progress update error:", error);
+      console.error(
+        "Progress update error:",
+        error
+      );
 
       Alert.alert(
         "Unable to Save Progress",
@@ -646,13 +1298,26 @@ export default function LessonPlayer() {
     if (!currentModule) return null;
 
     /*
-     * Next lesson within the same module.
+     * A lesson cannot be bypassed.
+     *
+     * The learner must first complete:
+     * - all required PDFs/audio
+     * - uploaded video
+     * - external video
+     * - the lesson itself
      */
 
-    if (
-      currentLessonIndex <
-      lessons.length - 1
-    ) {
+    if (!lessonCompleted) {
+      return null;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * NEXT LESSON IN SAME MODULE
+     * ---------------------------------------------------------
+     */
+
+    if (currentLessonIndex < lessons.length - 1) {
       return {
         moduleIndex: currentModuleIndex,
         lessonIndex: currentLessonIndex + 1,
@@ -660,13 +1325,39 @@ export default function LessonPlayer() {
     }
 
     /*
-     * First lesson of the next module.
+     * ---------------------------------------------------------
+     * LAST LESSON OF CURRENT MODULE
+     * ---------------------------------------------------------
+     *
+     * Do NOT automatically move to the next module.
+     *
+     * The module assignment must be passed first.
      */
 
-    if (
-      currentModuleIndex <
-      modules.length - 1
-    ) {
+    const progression =
+      getModuleProgression(currentModule);
+
+    if (progression.assignmentEnabled) {
+      /*
+       * Assignment is required.
+       *
+       * We return null here so the lesson player does
+       * not bypass the assignment.
+       */
+
+      return null;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * NO ASSIGNMENT
+     * ---------------------------------------------------------
+     *
+     * If there is no assignment, the next module can
+     * be reached after all lessons are complete.
+     */
+
+    if (currentModuleIndex < modules.length - 1) {
       const nextModule =
         modules[currentModuleIndex + 1];
 
@@ -727,47 +1418,286 @@ export default function LessonPlayer() {
 
   /*
    * =========================================================
+   * OPEN MODULE ASSIGNMENT
+   * =========================================================
+   */
+
+  const openAssignment = () => {
+    if (!currentModule?.assignment?.enabled) {
+      Alert.alert(
+        "No Assignment",
+        "This module does not have an assignment."
+      );
+      return;
+    }
+
+    const progression =
+      getModuleProgression(currentModule);
+
+    if (progression.assignmentStatus === "passed") {
+      Alert.alert(
+        "Assignment Passed",
+        "You have already passed this assignment."
+      );
+      return;
+    }
+
+    if (
+      progression.assignmentStatus ===
+      "pending_review"
+    ) {
+      Alert.alert(
+        "Assignment Under Review",
+        "Your assignment has been submitted and is awaiting review."
+      );
+      return;
+    }
+
+    if (!progression.assignmentAvailable) {
+      Alert.alert(
+        "Assignment Locked",
+        "Please complete all lessons in this module before attempting the assignment."
+      );
+      return;
+    }
+
+    router.push({
+      pathname: "/(student)/assignment",
+      params: {
+        courseId,
+        moduleId: String(
+          currentModule._id || ""
+        ),
+        moduleIndex: String(
+          currentModuleIndex
+        ),
+      },
+    } as any);
+  };
+
+  /*
+   * =========================================================
+   * OPEN FINAL EXAM
+   * =========================================================
+   */
+
+  const openFinalExam = () => {
+    if (!course?.finalExam?.enabled) {
+      return;
+    }
+
+    router.push({
+      pathname: "/(student)/final-exam",
+      params: {
+        courseId,
+      },
+    } as any);
+  };
+
+  /*
+   * =========================================================
    * NEXT LESSON
    * =========================================================
    */
 
   const goToNextLesson = () => {
-    const next = getNextPosition();
+    if (!currentModule) return;
 
-    if (!next) {
-      /*
-       * There are no more lessons.
-       *
-       * If a final exam exists, take the student there.
-       */
+    if (!lessonCompleted) {
+      Alert.alert(
+        "Lesson Locked",
+        "Please complete this lesson before continuing."
+      );
+      return;
+    }
 
-      if (course?.finalExam?.enabled) {
-        router.push({
-          pathname: "/(student)/final-exam",
-          params: {
-            courseId,
-          },
-        } as any);
+    /*
+     * ---------------------------------------------------------
+     * THERE IS ANOTHER LESSON IN THIS MODULE
+     * ---------------------------------------------------------
+     */
+
+    if (currentLessonIndex < lessons.length - 1) {
+      router.replace({
+        pathname:
+          "/(student)/lesson-player",
+        params: {
+          courseId,
+          moduleIndex: String(
+            currentModuleIndex
+          ),
+          lessonIndex: String(
+            currentLessonIndex + 1
+          ),
+        },
+      });
+
+      return;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * LAST LESSON OF MODULE
+     * ---------------------------------------------------------
+     */
+
+    const progression =
+      getModuleProgression(currentModule);
+
+    /*
+     * Assignment required.
+     */
+
+    if (progression.assignmentEnabled) {
+      if (
+        progression.assignmentStatus ===
+        "passed"
+      ) {
+        /*
+         * Assignment has already been passed.
+         * The backend should now have unlocked the
+         * next module.
+         */
+
+        const nextModule =
+          modules[currentModuleIndex + 1];
+
+        if (
+          nextModule?.lessons &&
+          nextModule.lessons.length > 0
+        ) {
+          router.replace({
+            pathname:
+              "/(student)/lesson-player",
+            params: {
+              courseId,
+              moduleIndex: String(
+                currentModuleIndex + 1
+              ),
+              lessonIndex: "0",
+            },
+          });
+
+          return;
+        }
+
+        /*
+         * No more modules.
+         * Final exam may now be available.
+         */
+
+        if (
+          course?.finalExam?.enabled &&
+          course.finalExam.progression
+            ?.unlocked
+        ) {
+          router.push({
+            pathname:
+              "/(student)/final-exam",
+            params: {
+              courseId,
+            },
+          } as any);
+
+          return;
+        }
 
         return;
       }
 
+      /*
+       * Assignment has not been passed.
+       * Send learner to assignment if available.
+       */
+
+      if (progression.assignmentAvailable) {
+        openAssignment();
+        return;
+      }
+
+      if (
+        progression.assignmentStatus ===
+        "pending_review"
+      ) {
+        Alert.alert(
+          "Assignment Under Review",
+          "Your assignment is currently being reviewed. You can continue once it has been passed."
+        );
+        return;
+      }
+
       Alert.alert(
-        "Course Lessons Complete",
-        "You have completed all available lessons."
+        "Assignment Required",
+        "Please complete and pass the assignment before continuing to the next module."
       );
 
       return;
     }
 
-    router.replace({
-      pathname: "/(student)/lesson-player",
-      params: {
-        courseId,
-        moduleIndex: String(next.moduleIndex),
-        lessonIndex: String(next.lessonIndex),
-      },
-    });
+    /*
+     * ---------------------------------------------------------
+     * NO ASSIGNMENT — MOVE TO NEXT MODULE
+     * ---------------------------------------------------------
+     */
+
+    const nextModule =
+      modules[currentModuleIndex + 1];
+
+    if (
+      nextModule?.lessons &&
+      nextModule.lessons.length > 0
+    ) {
+      const nextProgression =
+        getModuleProgression(nextModule);
+
+      if (!nextProgression.unlocked) {
+        Alert.alert(
+          "Module Locked",
+          "Complete the required activities in the previous module before continuing."
+        );
+        return;
+      }
+
+      router.replace({
+        pathname:
+          "/(student)/lesson-player",
+        params: {
+          courseId,
+          moduleIndex: String(
+            currentModuleIndex + 1
+          ),
+          lessonIndex: "0",
+        },
+      });
+
+      return;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * END OF COURSE
+     * ---------------------------------------------------------
+     */
+
+    if (
+      course?.finalExam?.enabled &&
+      course.finalExam.progression?.unlocked
+    ) {
+      router.push({
+        pathname:
+          "/(student)/final-exam",
+        params: {
+          courseId,
+        },
+      } as any);
+
+      return;
+    }
+
+    Alert.alert(
+      "Course Lessons Complete",
+      "You have completed all available lessons."
+    );
   };
 
   /*
@@ -791,48 +1721,6 @@ export default function LessonPlayer() {
         lessonIndex: String(previous.lessonIndex),
       },
     });
-  };
-
-  /*
-   * =========================================================
-   * OPEN MODULE ASSIGNMENT
-   * =========================================================
-   */
-
-  const openAssignment = () => {
-    if (!currentModule?.assignment?.enabled) {
-      return;
-    }
-
-    router.push({
-      pathname: "/(student)/assignment",
-      params: {
-        courseId,
-        moduleId: String(
-          currentModule._id || ""
-        ),
-        moduleIndex: String(currentModuleIndex),
-      },
-    } as any);
-  };
-
-  /*
-   * =========================================================
-   * OPEN FINAL EXAM
-   * =========================================================
-   */
-
-  const openFinalExam = () => {
-    if (!course?.finalExam?.enabled) {
-      return;
-    }
-
-    router.push({
-      pathname: "/(student)/final-exam",
-      params: {
-        courseId,
-      },
-    } as any);
   };
 
   /*
@@ -935,6 +1823,13 @@ export default function LessonPlayer() {
 
   const finalExamEnabled =
     course.finalExam?.enabled === true;
+
+  const finalExamProgression =
+    course.finalExam?.progression;
+
+  const finalExamUnlocked =
+    finalExamEnabled &&
+    finalExamProgression?.unlocked === true;
 
   /*
    * =========================================================
@@ -1143,6 +2038,62 @@ export default function LessonPlayer() {
         {/* ============================
             MATERIALS
         ============================ */}
+        {audioSource ? (
+        <View style={styles.audioPlayerCard}>
+          <Text style={styles.audioPlayerTitle}>
+            Audio Lesson
+          </Text>
+
+          <Text
+            style={styles.audioPlayerName}
+            numberOfLines={2}
+          >
+            {currentLesson.title ||
+              "Course Audio"}
+          </Text>
+
+          <View style={styles.audioControlsRow}>
+            <TouchableOpacity
+              style={styles.audioPlayButton}
+              onPress={() => {
+                if (audioStatus.playing) {
+                  audioPlayer.pause();
+                } else {
+                  audioPlayer.play();
+                }
+              }}
+            >
+              <Text style={styles.audioPlayButtonText}>
+                {audioStatus.playing
+                  ? "❚❚ Pause"
+                  : "▶ Play"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.audioStopButton}
+              onPress={() => {
+                audioPlayer.pause();
+                audioPlayer.seekTo(0);
+              }}
+            >
+              <Text style={styles.audioStopButtonText}>
+                ↺ Restart
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.audioTimeText}>
+            {Math.floor(
+              audioStatus.currentTime || 0
+            )}s /{" "}
+            {Math.floor(
+              audioStatus.duration || 0
+            )}s
+          </Text>
+        </View>
+      ) : null}
+
 
         {materials.length > 0 ? (
           <View style={styles.materialsSection}>
@@ -1279,6 +2230,16 @@ export default function LessonPlayer() {
                   }%
                 </Text>
               ) : null}
+
+              <Text
+                style={
+                  styles.assignmentStatusText
+                }
+              >
+                {getAssignmentStatusText(
+                  currentModule
+                )}
+              </Text>
             </View>
 
             <TouchableOpacity
@@ -1290,7 +2251,19 @@ export default function LessonPlayer() {
                   styles.assignmentButtonText
                 }
               >
-                Open
+                {getModuleProgression(currentModule)
+                  .assignmentStatus === "passed"
+                  ? "Passed"
+                  : getModuleProgression(currentModule)
+                      .assignmentStatus === "pending_review"
+                  ? "Under Review"
+                  : getModuleProgression(currentModule)
+                      .assignmentStatus === "failed"
+                  ? "Retry Assignment"
+                  : getModuleProgression(currentModule)
+                      .assignmentAvailable
+                  ? "Start Assignment"
+                  : "Locked"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1301,7 +2274,7 @@ export default function LessonPlayer() {
         ============================ */}
 
         {finalExamEnabled &&
-        !nextPosition ? (
+        finalExamUnlocked ? (
           <View style={styles.examCard}>
             <View style={styles.examIcon}>
               <Text style={styles.examIconText}>
@@ -1346,7 +2319,13 @@ export default function LessonPlayer() {
               onPress={openFinalExam}
             >
               <Text style={styles.examButtonText}>
-                Start Final Examination
+                {finalExamProgression?.status ===
+                "passed"
+                  ? "Exam Passed"
+                  : finalExamProgression?.status ===
+                    "pending_review"
+                  ? "Under Review"
+                  : "Start Final Examination"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1361,6 +2340,9 @@ export default function LessonPlayer() {
             styles.completeButton,
             lessonCompleted &&
               styles.completedButton,
+            !lessonCompleted &&
+              !allLearningItemsCompleted &&
+              styles.lockedCompleteButton,
           ]}
           onPress={markLessonComplete}
           disabled={markingComplete}
@@ -1370,12 +2352,12 @@ export default function LessonPlayer() {
               color="#FFFFFF"
             />
           ) : (
-            <Text
-              style={styles.completeButtonText}
-            >
+            <Text style={styles.completeButtonText}>
               {lessonCompleted
                 ? "✓ Lesson Completed — Continue"
-                : "✓ Mark Lesson as Complete"}
+                : allLearningItemsCompleted
+                ? "✓ Mark Lesson as Complete"
+                : "🔒 Complete Learning Materials First"}
             </Text>
           )}
         </TouchableOpacity>
@@ -1450,9 +2432,81 @@ export default function LessonPlayer() {
         </TouchableOpacity>
 
         <View style={styles.bottomSpace} />
-      </ScrollView>
-    </View>
-  );
+        </ScrollView>
+
+    <Modal
+      visible={pdfVisible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={() => {
+        setPdfVisible(false);
+        setPdfUri(null);
+        setPdfMaterialId(null);
+      }}
+    >
+      <View style={styles.pdfViewerContainer}>
+        <View style={styles.pdfViewerHeader}>
+          <TouchableOpacity
+            style={styles.pdfCloseButton}
+            onPress={() => {
+              setPdfVisible(false);
+              setPdfUri(null);
+              setPdfMaterialId(null);
+            }}
+          >
+            <Text style={styles.pdfCloseButtonText}>
+              ← Back
+            </Text>
+          </TouchableOpacity>
+
+          <Text
+            style={styles.pdfViewerTitle}
+            numberOfLines={1}
+          >
+            {pdfTitle}
+          </Text>
+        </View>
+
+        {pdfUri ? (
+          <Pdf
+            source={{
+              uri: pdfUri,
+              cache: false,
+            }}
+            style={styles.pdfViewer}
+            onLoadComplete={() => {
+              if (pdfMaterialId) {
+                markMaterialCompleted(pdfMaterialId);
+              }
+            }}
+            onError={(error) => {
+              console.error(
+                "PDF viewer error:",
+                error
+              );
+
+              Alert.alert(
+                "Unable to Display PDF",
+                "The PDF was downloaded but could not be displayed."
+              );
+            }}
+          />
+        ) : (
+          <View style={styles.pdfLoadingContainer}>
+            <ActivityIndicator
+              size="large"
+              color="#1D4ED8"
+            />
+
+            <Text style={styles.pdfLoadingText}>
+              Loading PDF...
+            </Text>
+          </View>
+        )}
+      </View>
+    </Modal>
+  </View>
+);
 }
 
 /*
@@ -1906,6 +2960,13 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  assignmentStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1D4ED8",
+    marginTop: 5,
+  },
+
   assignmentButton: {
     backgroundColor: "#1D4ED8",
     paddingHorizontal: 13,
@@ -2005,6 +3066,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#15803D",
   },
 
+  lockedCompleteButton: {
+    backgroundColor: "#94A3B8",
+  },
+
   completeButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
@@ -2072,6 +3137,125 @@ const styles = StyleSheet.create({
   bottomSpace: {
     height: 30,
   },
+
+  audioPlayerCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+
+  audioPlayerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 6,
+  },
+
+  audioPlayerName: {
+    fontSize: 14,
+    color: "#64748B",
+    marginBottom: 15,
+  },
+
+  audioControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  audioPlayButton: {
+    flex: 1,
+    backgroundColor: "#1D4ED8",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  audioPlayButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  audioStopButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#EDE9FE",
+  },
+
+  audioStopButtonText: {
+    color: "#5B21B6",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  audioTimeText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: "#64748B",
+    textAlign: "center",
+  },
+
+    /* PDF VIEWER */
+
+  pdfViewerContainer: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+
+  pdfViewerHeader: {
+    height: 60,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+
+  pdfCloseButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+  },
+
+  pdfCloseButtonText: {
+    color: "#1D4ED8",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  pdfViewerTitle: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+
+  pdfViewer: {
+    flex: 1,
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+  },
+
+  pdfLoadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+
+  pdfLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748B",
+  },
+
 });
-
-
