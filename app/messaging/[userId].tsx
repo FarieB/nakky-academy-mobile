@@ -12,6 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import API from "../../src/services/api";
 import {
   startMessageListener,
@@ -193,189 +196,285 @@ export default function ChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <SafeAreaView
+      style={styles.safeArea}
+      edges={["bottom"]}
     >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{name}</Text>
-        <Text style={styles.online}>
-          {isOnline
-            ? "🟢 Online"
-            : lastSeen
-            ? `Last seen ${new Date(lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-            : "Offline"}
-        </Text>
-      </View>
-
-      {isTyping && (
-        <Text
-          style={{
-            color: "gray",
-            fontStyle: "italic",
-            marginBottom: 10,
-          }}
-        >
-          Typing...
-        </Text>
-      )}
-
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={{
-          padding: 15,
-        }}
-        onContentSizeChange={() =>
-          flatListRef.current?.scrollToEnd({
-            animated: true,
-          })
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : "height"
         }
-        renderItem={({ item }) => {
-          const mine = item.sender._id === currentUserId;
-          return (
-            <View
-              style={[
-                styles.messageContainer,
-                mine ? styles.mine : styles.theirs,
-              ]}
-            >
-              <Text style={styles.messageText}>{item.message}</Text>
-              <Text style={styles.time}>
-                {new Date(item.createdAt).toLocaleTimeString([], {
+      >
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>
+            {name}
+          </Text>
+
+          <Text style={styles.online}>
+            {isOnline
+              ? "🟢 Online"
+              : lastSeen
+              ? `Last seen ${new Date(
+                  lastSeen
+                ).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
-                })}
-              </Text>
+                })}`
+              : "Offline"}
+          </Text>
+        </View>
 
-              {mine && (
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: item.status === "read" ? "#2196F3" : "#777",
-                    marginTop: 2,
-                    textAlign: "right",
-                  }}
-                >
-                  {item.status === "sent" && "✓ Sent"}
-                  {item.status === "delivered" && "✓✓ Delivered"}
-                  {item.status === "read" && "✓✓ Read"}
+        {isTyping && (
+          <Text style={styles.typingText}>
+            Typing...
+          </Text>
+        )}
+
+        <FlatList
+          ref={flatListRef}
+          style={styles.messageList}
+          data={messages}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.messageListContent}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
+          onContentSizeChange={() =>
+            flatListRef.current?.scrollToEnd({
+              animated: true,
+            })
+          }
+          renderItem={({ item }) => {
+            const mine =
+              item.sender._id === currentUserId;
+
+            return (
+              <View
+                style={[
+                  styles.messageContainer,
+                  mine
+                    ? styles.mine
+                    : styles.theirs,
+                ]}
+              >
+                <Text style={styles.messageText}>
+                  {item.message}
                 </Text>
-              )}
-            </View>
-          );
-        }}
-      />
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          value={text}
-          onChangeText={(value) => {
-            setText(value);
+                <Text style={styles.time}>
+                  {new Date(
+                    item.createdAt
+                  ).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
 
-            const socket = getSocket();
-            socket?.emit("typing", {
-              receiverId: userId,
-              senderId: currentUserId,
-            });
+                {mine && (
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      color:
+                        item.status === "read"
+                          ? "#2196F3"
+                          : "#777",
+                      marginTop: 2,
+                      textAlign: "right",
+                    }}
+                  >
+                    {item.status === "sent" &&
+                      "✓ Sent"}
 
-            if (typingTimeout.current) {
-              clearTimeout(typingTimeout.current);
-            }
+                    {item.status ===
+                      "delivered" &&
+                      "✓✓ Delivered"}
 
-            typingTimeout.current = setTimeout(() => {
-              socket?.emit("stop_typing", {
+                    {item.status === "read" &&
+                      "✓✓ Read"}
+                  </Text>
+                )}
+              </View>
+            );
+          }}
+        />
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#888"
+            value={text}
+            onChangeText={(value) => {
+              setText(value);
+
+              const socket = getSocket();
+
+              socket?.emit("typing", {
                 receiverId: userId,
                 senderId: currentUserId,
               });
-            }, 1500);
-          }}
-          multiline
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
-          <Text style={styles.sendText}>Send</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+
+              if (typingTimeout.current) {
+                clearTimeout(
+                  typingTimeout.current
+                );
+              }
+
+              typingTimeout.current =
+                setTimeout(() => {
+                  socket?.emit(
+                    "stop_typing",
+                    {
+                      receiverId: userId,
+                      senderId:
+                        currentUserId,
+                    }
+                  );
+                }, 1500);
+            }}
+            multiline
+            textAlignVertical="top"
+            returnKeyType="default"
+            blurOnSubmit={false}
+          />
+
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={sendMessage}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.sendText}>
+              Send
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F5F7FA",
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA",
   },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+
   header: {
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
     backgroundColor: "#E91E63",
     elevation: 4,
   },
+
   headerTitle: {
     color: "#fff",
     fontSize: 20,
     fontWeight: "bold",
   },
+
   online: {
     color: "#fff",
     opacity: 0.8,
+    marginTop: 3,
   },
+
+  typingText: {
+    color: "gray",
+    fontStyle: "italic",
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    backgroundColor: "#F5F7FA",
+  },
+
+  messageList: {
+    flex: 1,
+  },
+
+  messageListContent: {
+    padding: 15,
+    paddingBottom: 10,
+  },
+
   messageContainer: {
     maxWidth: "78%",
     padding: 12,
     borderRadius: 18,
     marginBottom: 12,
   },
+
   mine: {
     alignSelf: "flex-end",
     backgroundColor: "#DCF8C6",
   },
+
   theirs: {
     alignSelf: "flex-start",
     backgroundColor: "#FFFFFF",
   },
+
   messageText: {
     fontSize: 16,
     color: "#333",
   },
+
   time: {
     fontSize: 11,
     color: "#777",
     marginTop: 6,
     textAlign: "right",
   },
+
   inputContainer: {
     flexDirection: "row",
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderTopWidth: 1,
     borderColor: "#eee",
     backgroundColor: "#fff",
     alignItems: "flex-end",
   },
+
   input: {
     flex: 1,
+    minHeight: 48,
+    maxHeight: 120,
     backgroundColor: "#F2F2F2",
     borderRadius: 25,
     paddingHorizontal: 18,
     paddingVertical: 12,
-    maxHeight: 120,
+    fontSize: 16,
+    color: "#222",
   },
+
   sendButton: {
     marginLeft: 10,
-    backgroundColor: "#E91E63",
+    minHeight: 48,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
+    backgroundColor: "#E91E63",
+    justifyContent: "center",
+    alignItems: "center",
   },
+
   sendText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 16,
   },
 });

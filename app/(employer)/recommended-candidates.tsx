@@ -2,10 +2,10 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Button,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -18,20 +18,27 @@ export default function RecommendedCandidates() {
   const [candidates, setCandidates] = useState<any[]>([]);
 
   // ==========================
-  // FETCH MATCHES
+  // FETCH RECOMMENDED CANDIDATES
   // ==========================
   const fetchMatches = async () => {
     try {
+      setLoading(true);
+
       const res = await API.get("/recommendations/candidates");
 
-      // FIXED
-      setCandidates(res.data);
+      console.log(
+        "RECOMMENDED CANDIDATES:",
+        JSON.stringify(res.data, null, 2)
+      );
 
+      setCandidates(Array.isArray(res.data) ? res.data : []);
     } catch (err: any) {
       console.log(
         "MATCH ERROR:",
         err?.response?.data || err.message
       );
+
+      setCandidates([]);
     } finally {
       setLoading(false);
     }
@@ -47,7 +54,7 @@ export default function RecommendedCandidates() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#E91E63" />
       </View>
     );
   }
@@ -56,59 +63,127 @@ export default function RecommendedCandidates() {
   // UI
   // ==========================
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.title}>
         Recommended Candidates
       </Text>
 
+      <Text style={styles.subtitle}>
+        Candidates recommended based on your employer profile.
+      </Text>
+
       {candidates.length === 0 ? (
-        <Text>No matches found</Text>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>
+            No Recommended Candidates
+          </Text>
+
+          <Text style={styles.emptyText}>
+            Complete your employer profile and search preferences
+            to receive candidate recommendations.
+          </Text>
+        </View>
       ) : (
-        candidates.map((item: any, index: number) => (
-          <View key={index} style={styles.card}>
-
-            <Text style={styles.bold}>
-              {item.candidate?.name}
+        candidates.map((candidate: any) => (
+          <View
+            key={candidate._id}
+            style={styles.card}
+          >
+            {/* NAME */}
+            <Text style={styles.name}>
+              {candidate.firstName || "Candidate"}
+              {candidate.surname
+                ? ` ${candidate.surname}`
+                : ""}
             </Text>
 
-            <Text>
-              Type: {item.candidate?.workerType}
+            {/* VERIFIED */}
+            {(
+              candidate.profileVerified ||
+              candidate.user?.verifiedBadge
+            ) && (
+              <Text style={styles.verified}>
+                ✔ Verified Candidate
+              </Text>
+            )}
+
+            {/* WORKER TYPES */}
+            <Text style={styles.detail}>
+              💼{" "}
+              {candidate.workerTypes?.length
+                ? candidate.workerTypes.join(", ")
+                : "Not specified"}
             </Text>
 
-            <Text>
-              Experience:{" "}
-              {item.candidate?.yearsExperience || 0} years
+            {/* LOCATION */}
+            <Text style={styles.detail}>
+              📍{" "}
+              {[
+                candidate.suburb,
+                candidate.city,
+                candidate.province,
+              ]
+                .filter(Boolean)
+                .join(", ") || "Location not specified"}
             </Text>
 
-            <Text>
-              Rating: ⭐{" "}
-              {item.candidate?.averageRating || 0}
+            {/* EXPERIENCE */}
+            <Text style={styles.detail}>
+              ⭐ Experience:{" "}
+              {candidate.yearsExperience || 0} years
             </Text>
 
-            <Text>
-              Match Score: {item.score}
+            {/* RATING */}
+            <Text style={styles.detail}>
+              ⭐ Rating:{" "}
+              {candidate.averageRating || 0} / 5
+              {"  "}
+              ({candidate.totalReviews || 0} reviews)
             </Text>
 
-            {/* ===================== */}
-            {/* ACTIONS */}
-            {/* ===================== */}
-            <View style={{ marginTop: 10 }}>
+            {/* LANGUAGES */}
+            <Text style={styles.detail}>
+              🌍{" "}
+              {candidate.languages?.length
+                ? candidate.languages.join(", ")
+                : "Languages not specified"}
+            </Text>
 
-              <Button
-                title="View Profile"
-                onPress={() =>
-                  router.push({
-                    pathname:
-                      "/employer/candidate-profile" as any,
-                    params: {
-                      id: item.candidate?._id,
-                    },
-                  })
-                }
-              />
+            {/* SALARY */}
+            <Text style={styles.detail}>
+              💰 Expected Salary:{" "}
+              {candidate.expectedSalary
+                ? `R${candidate.expectedSalary}`
+                : "Not specified"}
+            </Text>
 
-            </View>
+            {/* AVAILABILITY */}
+            <Text style={styles.detail}>
+              🟢{" "}
+              {candidate.availabilityStatus ||
+                "Availability not specified"}
+            </Text>
 
+            {/* VIEW PROFILE */}
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/(employer)/candidate-details",
+                  params: {
+                    id: candidate._id,
+                  },
+                })
+              }
+            >
+              <Text style={styles.profileButtonText}>
+                VIEW PROFILE
+              </Text>
+            </TouchableOpacity>
           </View>
         ))
       )}
@@ -118,7 +193,13 @@ export default function RecommendedCandidates() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: "#F6F8FA",
+  },
+
+  content: {
     padding: 20,
+    paddingBottom: 40,
   },
 
   center: {
@@ -128,19 +209,86 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
+    color: "#2E7D32",
+    marginBottom: 8,
+  },
+
+  subtitle: {
+    fontSize: 15,
+    color: "#666",
     marginBottom: 20,
   },
 
   card: {
-    padding: 15,
-    backgroundColor: "#f2f2f2",
-    marginBottom: 10,
-    borderRadius: 8,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 18,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
   },
 
-  bold: {
+  name: {
+    fontSize: 22,
     fontWeight: "bold",
+    color: "#222",
+    marginBottom: 8,
+  },
+
+  verified: {
+    color: "#2E7D32",
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+
+  detail: {
+    fontSize: 15,
+    color: "#555",
+    marginBottom: 7,
+    lineHeight: 22,
+  },
+
+  profileButton: {
+    backgroundColor: "#2E7D32",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 12,
+  },
+
+  profileButtonText: {
+    color: "#FFF",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+
+  emptyCard: {
+    backgroundColor: "#FFF",
+    padding: 30,
+    borderRadius: 16,
+    alignItems: "center",
+    marginTop: 20,
+  },
+
+  emptyTitle: {
+    fontSize: 21,
+    fontWeight: "bold",
+    color: "#444",
+    marginBottom: 10,
+  },
+
+  emptyText: {
+    fontSize: 15,
+    color: "#777",
+    textAlign: "center",
+    lineHeight: 22,
   },
 });

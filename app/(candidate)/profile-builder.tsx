@@ -18,6 +18,17 @@ import {
 
 import API from "../../src/services/api";
 
+type QualificationItem = {
+  title?: string;
+  institution?: string;
+  yearCompleted?: number;
+  certificateFile?: string;
+};
+
+type ReferenceItem = {
+  file?: string;
+};
+
 export default function ProfileBuilder() {
   const router = useRouter();
 
@@ -72,16 +83,87 @@ export default function ProfileBuilder() {
   // STEP 4
   // =====================================
 
+  // These contain either:
+  // - a local file:// URI for a newly selected file
+  // - a server filename for an existing uploaded file
   const [idDocument, setIdDocument] = useState("");
   const [cv, setCv] = useState("");
   const [policeClearance, setPoliceClearance] = useState("");
 
-  const [qualifications, setQualifications] = useState<string[]>([]);
-  const [references, setReferences] = useState<string[]>([]);
+  const [qualifications, setQualifications] = useState<
+    (string | QualificationItem)[]
+  >([]);
 
-    useEffect(() => {
+  const [references, setReferences] = useState<(string | ReferenceItem)[]>(
+    []
+  );
+
+  useEffect(() => {
     loadProfile();
   }, []);
+
+  // =====================================
+  // FILE HELPERS
+  // =====================================
+
+  const getFileName = (uri: string, fallback: string) => {
+    const cleanUri = uri.split("?")[0];
+    const parts = cleanUri.split("/");
+    const name = parts[parts.length - 1];
+
+    return name || fallback;
+  };
+
+  const getMimeType = (uri: string) => {
+    const cleanUri = uri.split("?")[0];
+    const extension = cleanUri
+      .split(".")
+      .pop()
+      ?.toLowerCase();
+
+    switch (extension) {
+      case "pdf":
+        return "application/pdf";
+
+      case "jpg":
+      case "jpeg":
+        return "image/jpeg";
+
+      case "png":
+        return "image/png";
+
+      case "gif":
+        return "image/gif";
+
+      case "webp":
+        return "image/webp";
+
+      case "doc":
+        return "application/msword";
+
+      case "docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      case "xls":
+        return "application/vnd.ms-excel";
+
+      case "xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      case "txt":
+        return "text/plain";
+
+      default:
+        return "application/octet-stream";
+    }
+  };
+
+  const isLocalFile = (value: string) => {
+    return (
+      value.startsWith("file://") ||
+      value.startsWith("content://")
+    );
+  };
 
   // =====================================
   // PHOTO PICKER
@@ -150,15 +232,129 @@ export default function ProfileBuilder() {
   };
 
   // =====================================
+  // UPLOAD CANDIDATE DOCUMENTS
+  // =====================================
+
+  const uploadCandidateDocuments = async (token: string) => {
+    const formData = new FormData();
+
+    let hasNewDocuments = false;
+
+    // -------------------------------------
+    // ID DOCUMENT
+    // -------------------------------------
+
+    if (idDocument && isLocalFile(idDocument)) {
+      formData.append("idDocument", {
+        uri: idDocument,
+        name: getFileName(idDocument, "id-document"),
+        type: getMimeType(idDocument),
+      } as any);
+
+      hasNewDocuments = true;
+    }
+
+    // -------------------------------------
+    // CV
+    // -------------------------------------
+
+    if (cv && isLocalFile(cv)) {
+      formData.append("cv", {
+        uri: cv,
+        name: getFileName(cv, "cv"),
+        type: getMimeType(cv),
+      } as any);
+
+      hasNewDocuments = true;
+    }
+
+    // -------------------------------------
+    // POLICE CLEARANCE
+    // -------------------------------------
+
+    if (policeClearance && isLocalFile(policeClearance)) {
+      formData.append("policeClearance", {
+        uri: policeClearance,
+        name: getFileName(
+          policeClearance,
+          "police-clearance"
+        ),
+        type: getMimeType(policeClearance),
+      } as any);
+
+      hasNewDocuments = true;
+    }
+
+    // -------------------------------------
+    // QUALIFICATIONS
+    // -------------------------------------
+
+    qualifications.forEach((item) => {
+      if (typeof item === "string" && isLocalFile(item)) {
+        formData.append("qualifications", {
+          uri: item,
+          name: getFileName(item, "qualification"),
+          type: getMimeType(item),
+        } as any);
+
+        hasNewDocuments = true;
+      }
+    });
+
+    // -------------------------------------
+    // REFERENCES
+    // -------------------------------------
+
+    references.forEach((item) => {
+      if (typeof item === "string" && isLocalFile(item)) {
+        formData.append("references", {
+          uri: item,
+          name: getFileName(item, "reference"),
+          type: getMimeType(item),
+        } as any);
+
+        hasNewDocuments = true;
+      }
+    });
+
+    if (!hasNewDocuments) {
+      return null;
+    }
+
+    console.log("Uploading candidate documents...");
+
+    const response = await API.post(
+      "/profiles/candidate/profile-documents",
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    console.log(
+      "Candidate documents uploaded successfully."
+    );
+
+    return response.data;
+  };
+
+  // =====================================
   // NAVIGATION
   // =====================================
 
   const nextStep = () => {
-    if (step < 5) setStep(step + 1);
+    if (step < 5) {
+      setStep(step + 1);
+    }
   };
 
   const previousStep = () => {
-    if (step > 1) setStep(step - 1);
+    if (step > 1) {
+      setStep(step - 1);
+    }
   };
 
   // =====================================
@@ -197,199 +393,427 @@ export default function ProfileBuilder() {
     );
   };
 
+  // =====================================
+  // LOAD PROFILE
+  // =====================================
+
   const loadProfile = async () => {
-  try {
-    const token = await AsyncStorage.getItem("token");
+    try {
+      const token = await AsyncStorage.getItem("token");
 
-    API.defaults.headers.common.Authorization = `Bearer ${token}`;
+      API.defaults.headers.common.Authorization =
+        `Bearer ${token}`;
 
-    const { data } = await API.get("/profiles/candidate");
-    setProfileExists(true);
+      const { data } = await API.get("/profiles/candidate");
 
-    if (!data) return;
+      setProfileExists(true);
 
-    // Personal
-    setProfilePhoto(data.profilePhoto || "");
-    setFirstName(data.firstName || "");
-    setSurname(data.surname || "");
-    setGender(data.gender || "");
-    setNationality(data.nationality || "");
-    setBio(data.bio || "");
+      if (!data) return;
 
-    if (data.dateOfBirth) {
-      const date = new Date(data.dateOfBirth);
+      // -------------------------------------
+      // PERSONAL
+      // -------------------------------------
 
-      const formatted =
-        String(date.getDate()).padStart(2, "0") +
-        "/" +
-        String(date.getMonth() + 1).padStart(2, "0") +
-        "/" +
-        date.getFullYear();
+      setProfilePhoto(data.profilePhoto || "");
+      setFirstName(data.firstName || "");
+      setSurname(data.surname || "");
+      setGender(data.gender || "");
+      setNationality(data.nationality || "");
+      setBio(data.bio || "");
 
-      setDateOfBirth(formatted);
+      if (data.dateOfBirth) {
+        const date = new Date(data.dateOfBirth);
+
+        const formatted =
+          String(date.getDate()).padStart(2, "0") +
+          "/" +
+          String(date.getMonth() + 1).padStart(2, "0") +
+          "/" +
+          date.getFullYear();
+
+        setDateOfBirth(formatted);
+      }
+
+      setLanguages(data.languages || []);
+
+      // -------------------------------------
+      // LOCATION
+      // -------------------------------------
+
+      setProvince(data.province || "");
+      setCity(data.city || "");
+      setSuburb(data.suburb || "");
+      setStreetAddress(data.streetAddress || "");
+
+      // -------------------------------------
+      // EMPLOYMENT
+      // -------------------------------------
+
+      setWorkerTypes(data.workerTypes || []);
+      setSkills(data.skills || []);
+      setWorkPreferences(data.workPreferences || []);
+
+      setYearsExperience(
+        String(data.yearsExperience || 0)
+      );
+
+      setExpectedSalary(
+        String(data.expectedSalary || 0)
+      );
+
+      setAvailabilityStatus(
+        data.availabilityStatus ||
+          "Available Immediately"
+      );
+
+      // -------------------------------------
+      // SHIFT PREFERENCES
+      // -------------------------------------
+
+      if (data.shifts) {
+        setDayShift(Boolean(data.shifts.day));
+        setNightShift(Boolean(data.shifts.night));
+      }
+
+      // -------------------------------------
+      // DOCUMENTS
+      // -------------------------------------
+
+      setQualifications(
+        Array.isArray(data.qualifications)
+          ? data.qualifications
+          : []
+      );
+
+      setReferences(
+        Array.isArray(data.references)
+          ? data.references
+          : []
+      );
+
+      if (data.documents) {
+        setIdDocument(
+          data.documents.idDocument || ""
+        );
+
+        setCv(data.documents.cv || "");
+
+        setPoliceClearance(
+          data.documents.policeClearance || ""
+        );
+      }
+    } catch (err) {
+      console.log(
+        "No existing profile found."
+      );
     }
+  };
 
-    setLanguages(data.languages || []);
+  // =====================================
+  // SAVE PROFILE
+  // =====================================
 
-    // Location
-    setProvince(data.province || "");
-    setCity(data.city || "");
-    setSuburb(data.suburb || "");
-    setStreetAddress(data.streetAddress || "");
-
-    // Employment
-    setWorkerTypes(data.workerTypes || []);
-    setSkills(data.skills || []);
-    setWorkPreferences(data.workPreferences || []);
-
-    setYearsExperience(String(data.yearsExperience || 0));
-    setExpectedSalary(String(data.expectedSalary || 0));
-
-    setAvailabilityStatus(
-      data.availabilityStatus || "Available Immediately"
+  const saveProfile = async () => {
+    console.log(
+      "========== SAVE PROFILE =========="
     );
 
-    // Documents
-    setQualifications(data.qualifications || []);
-    setReferences(data.references || []);
+    try {
+      setSaving(true);
 
-    if (data.documents) {
-      setIdDocument(data.documents.idDocument || "");
-      setCv(data.documents.cv || "");
-      setPoliceClearance(data.documents.policeClearance || "");
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert(
+          "Session Error",
+          "Your login session has expired. Please log in again."
+        );
+        return;
+      }
+
+      API.defaults.headers.common.Authorization =
+        `Bearer ${token}`;
+
+      // -------------------------------------
+      // 1. UPLOAD NEW DOCUMENT FILES
+      // -------------------------------------
+
+      const uploadedDocuments =
+        await uploadCandidateDocuments(token);
+
+      console.log(
+        "Uploaded document response:",
+        uploadedDocuments
+      );
+
+      // -------------------------------------
+      // 2. KEEP EXISTING SERVER DOCUMENTS
+      // -------------------------------------
+
+      const finalIdDocument =
+        uploadedDocuments?.documents?.idDocument ||
+        (!isLocalFile(idDocument)
+          ? idDocument
+          : "");
+
+      const finalCv =
+        uploadedDocuments?.documents?.cv ||
+        (!isLocalFile(cv) ? cv : "");
+
+      const finalPoliceClearance =
+        uploadedDocuments?.documents
+          ?.policeClearance ||
+        (!isLocalFile(policeClearance)
+          ? policeClearance
+          : "");
+
+      // -------------------------------------
+      // 3. KEEP EXISTING QUALIFICATIONS
+      // -------------------------------------
+
+      const existingQualifications =
+        qualifications
+          .filter(
+            (item): item is QualificationItem =>
+              typeof item === "object"
+          )
+          .map((item) => ({
+            title:
+              item.title || "Qualification",
+            institution:
+              item.institution || "",
+            yearCompleted:
+              item.yearCompleted ||
+              new Date().getFullYear(),
+            certificateFile:
+              item.certificateFile || "",
+          }));
+
+      const uploadedQualifications =
+        uploadedDocuments?.qualifications || [];
+
+      const finalQualifications = [
+        ...existingQualifications,
+        ...uploadedQualifications
+          .filter(
+            (item: any) =>
+              item?.certificateFile
+          )
+          .map((item: any) => ({
+            title:
+              item.title || "Qualification",
+            institution:
+              item.institution || "",
+            yearCompleted:
+              item.yearCompleted ||
+              new Date().getFullYear(),
+            certificateFile:
+              item.certificateFile,
+          })),
+      ];
+
+      // -------------------------------------
+      // 4. KEEP EXISTING REFERENCES
+      // -------------------------------------
+
+      const existingReferences =
+        references
+          .filter(
+            (item): item is ReferenceItem =>
+              typeof item === "object"
+          )
+          .map((item) => ({
+            file: item.file || "",
+          }))
+          .filter((item) => item.file);
+
+      const uploadedReferences =
+        uploadedDocuments?.references || [];
+
+      const finalReferences = [
+        ...existingReferences,
+        ...uploadedReferences
+          .filter(
+            (item: any) =>
+              item?.file
+          )
+          .map((item: any) => ({
+            file: item.file,
+          })),
+      ];
+
+      // -------------------------------------
+      // 5. BUILD PROFILE PAYLOAD
+      // -------------------------------------
+
+      const payload = {
+        firstName,
+        surname,
+        gender,
+
+        dateOfBirth:
+          dateOfBirth &&
+          dateOfBirth.includes("/")
+            ? new Date(
+                dateOfBirth
+                  .split("/")
+                  .reverse()
+                  .join("-")
+              )
+            : undefined,
+
+        nationality,
+        bio,
+
+        province,
+        city,
+        suburb,
+        streetAddress,
+
+        workerTypes,
+        languages,
+        skills,
+
+        yearsExperience:
+          Number(yearsExperience) || 0,
+
+        expectedSalary:
+          Number(expectedSalary) || 0,
+
+        availabilityStatus,
+        workPreferences,
+
+        shifts: {
+          day: dayShift,
+          night: nightShift,
+        },
+
+        profilePhoto,
+
+        qualifications:
+          finalQualifications,
+
+        references:
+          finalReferences,
+
+        documents: {
+          idDocument:
+            finalIdDocument,
+
+          policeClearance:
+            finalPoliceClearance,
+
+          cv:
+            finalCv,
+        },
+      };
+
+      console.log(
+        "Profile payload:",
+        payload
+      );
+
+      // -------------------------------------
+      // 6. SAVE PROFILE
+      // -------------------------------------
+
+      if (profileExists) {
+        await API.put(
+          "/profiles/candidate",
+          payload
+        );
+      } else {
+        await API.post(
+          "/profiles/candidate",
+          payload
+        );
+      }
+
+      console.log("PROFILE SAVE SUCCESS");
+
+      Alert.alert(
+        "Success",
+        profileExists
+          ? "Profile and documents updated successfully."
+          : "Profile and documents uploaded successfully."
+      );
+
+      router.replace(
+        "/(candidate)/candidate-dashboard"
+      );
+    } catch (err: any) {
+      console.log(
+        "========== PROFILE ERROR =========="
+      );
+
+      console.log(
+        "Status:",
+        err.response?.status
+      );
+
+      console.log(
+        "Response:",
+        err.response?.data
+      );
+
+      console.log(
+        "Message:",
+        err.message
+      );
+
+      console.log(
+        "Full Error:",
+        err
+      );
+
+      Alert.alert(
+        "Profile Error",
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Unable to save your profile."
+      );
+    } finally {
+      setSaving(false);
     }
-  } catch (err) {
-    console.log("No existing profile found.");
-  }
-};
+  };
 
-// ===========================
-// SAVE PROFILE
-// ===========================
-
-const saveProfile = async () => {
-  console.log("========== SAVE PROFILE ==========");
-
-  try {
-    setSaving(true);
-
-    const token = await AsyncStorage.getItem("token");
-
-    console.log("Token:", token);
-
-    API.defaults.headers.common.Authorization = `Bearer ${token}`;
-
-    const payload = {
-      firstName,
-      surname,
-      gender,
-      dateOfBirth: new Date(
-        dateOfBirth.split("/").reverse().join("-")
-      ),
-      nationality,
-      bio,
-
-      province,
-      city,
-      suburb,
-      streetAddress,
-
-      workerTypes,
-      languages,
-      skills,
-
-      yearsExperience: Number(yearsExperience),
-      expectedSalary: Number(expectedSalary),
-
-      availabilityStatus,
-      workPreferences,
-
-      shifts: {
-        day: dayShift,
-        night: nightShift,
-      },
-
-      profilePhoto,
-
-      qualifications: qualifications.map((file) => ({
-      title: "Qualification",
-      institution: "",
-      yearCompleted: new Date().getFullYear(),
-      certificateFile: file,
-    })),
-
-      references: references.map(() => ({
-      name: "",
-      relationship: "",
-      phone: "",
-    })),
-
-      documents: {
-        idDocument,
-        policeClearance,
-        cv,
-      },
-    };
-
-    console.log("Payload:");
-    console.log(payload);
-
-    // Dynamic HTTP verb routing based on profile state toggle
-    if (profileExists) {
-      await API.put("/profiles/candidate", payload);
-    } else {
-      await API.post("/profiles/candidate", payload);
-    }
-
-    console.log("SUCCESS");
-
-    Alert.alert(
-    "Success",
-    profileExists
-      ? "Profile updated successfully."
-      : "Profile created successfully."
-  ); 
-
-    router.replace("/(candidate)/candidate-dashboard");
-  } catch (err: any) {
-    console.log("========== PROFILE ERROR ==========");
-    console.log("Status:", err.response?.status);
-    console.log("Response:", err.response?.data);
-    console.log("Message:", err.message);
-    console.log("Full Error:", err);
-
-    Alert.alert(
-      "Profile Error",
-      JSON.stringify(err.response?.data || err.message)
-    );
-  } finally {
-    setSaving(false);
-  }
-};
-
-
-  // ===========================
+  // =====================================
   // LOADING STATE
-  // ===========================
+  // =====================================
 
   if (saving) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Saving profile...</Text>
+        <ActivityIndicator
+          size="large"
+          color="#4CAF50"
+        />
+
+        <Text style={styles.loadingText}>
+          Uploading documents and saving profile...
+        </Text>
       </View>
     );
   }
 
-  // ===========================
+  // =====================================
   // MAIN RENDER
-  // ===========================
+  // =====================================
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.heading}>Candidate Profile Builder</Text>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.heading}>
+        Candidate Profile Builder
+      </Text>
 
-      <Text style={styles.subHeading}>Step {step} of 5</Text>
+      <Text style={styles.subHeading}>
+        Step {step} of 5
+      </Text>
 
       {/* Progress Bar */}
 
@@ -407,317 +831,360 @@ const saveProfile = async () => {
       {/* ========================= */}
       {/* STEP 1 */}
       {/* ========================= */}
-          {step === 1 && (
-      <>
-        <Text style={styles.section}>Personal Information</Text>
 
-        <TouchableOpacity
-          style={styles.photoContainer}
-          onPress={pickProfilePhoto}
-        >
-          {profilePhoto ? (
-            <Image
-              source={{ uri: profilePhoto }}
-              style={styles.profileImage}
-            />
-          ) : (
-            <>
-              <Text style={styles.photoIcon}>👤</Text>
-              <Text style={styles.photoText}>
-                Upload Profile Picture
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <TextInput
-          style={styles.input}
-          placeholder="First Name"
-          value={firstName}
-          onChangeText={setFirstName}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Surname"
-          value={surname}
-          onChangeText={setSurname}
-        />
-
-        <Text style={styles.label}>Gender</Text>
-
-        <View style={styles.optionGrid}>
+      {step === 1 && (
+        <>
+          <Text style={styles.section}>
+            Personal Information
+          </Text>
 
           <TouchableOpacity
-            style={[
-              styles.optionButton,
-              gender === "Female" && styles.optionSelected,
-            ]}
-            onPress={() => setGender("Female")}
+            style={styles.photoContainer}
+            onPress={pickProfilePhoto}
           >
-            <Text
-              style={[
-                styles.optionText,
-                gender === "Female" && styles.optionTextSelected,
-              ]}
-            >
-              Female
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.optionButton,
-              gender === "Male" && styles.optionSelected,
-            ]}
-            onPress={() => setGender("Male")}
-          >
-            <Text
-              style={[
-                styles.optionText,
-                gender === "Male" && styles.optionTextSelected,
-              ]}
-            >
-              Male
-            </Text>
-          </TouchableOpacity>
-
-        </View>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Date of Birth (DD/MM/YYYY)"
-          value={dateOfBirth}
-          onChangeText={setDateOfBirth}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Nationality"
-          value={nationality}
-          onChangeText={setNationality}
-        />
-
-        <Text style={styles.label}>Languages Spoken</Text>
-
-        <View style={styles.checkboxContainer}>
-
-          {[
-            "English",
-            "Zulu",
-            "Xhosa",
-            "Sotho",
-            "Xitsonga",
-            "Tswana",
-            "Venda",
-            "Ndebele",
-            "Swati",
-            "Shona",
-          ].map((language) => (
-            <View key={language} style={styles.checkboxRow}>
-              <CheckBox
-                value={languages.includes(language)}
-                onValueChange={() => toggleLanguage(language)}
-                color="#4CAF50"
+            {profilePhoto ? (
+              <Image
+                source={{ uri: profilePhoto }}
+                style={styles.profileImage}
               />
-              <Text style={styles.checkboxLabel}>
-                {language}
+            ) : (
+              <>
+                <Text style={styles.photoIcon}>
+                  👤
+                </Text>
+
+                <Text style={styles.photoText}>
+                  Upload Profile Picture
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            placeholder="First Name"
+            value={firstName}
+            onChangeText={setFirstName}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Surname"
+            value={surname}
+            onChangeText={setSurname}
+          />
+
+          <Text style={styles.label}>
+            Gender
+          </Text>
+
+          <View style={styles.optionGrid}>
+            <TouchableOpacity
+              style={[
+                styles.optionButton,
+                gender === "Female" &&
+                  styles.optionSelected,
+              ]}
+              onPress={() =>
+                setGender("Female")
+              }
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  gender === "Female" &&
+                    styles.optionTextSelected,
+                ]}
+              >
+                Female
               </Text>
-            </View>
-          ))}
+            </TouchableOpacity>
 
-        </View>
+            <TouchableOpacity
+              style={[
+                styles.optionButton,
+                gender === "Male" &&
+                  styles.optionSelected,
+              ]}
+              onPress={() =>
+                setGender("Male")
+              }
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  gender === "Male" &&
+                    styles.optionTextSelected,
+                ]}
+              >
+                Male
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        <TextInput
-          style={[
-            styles.input,
-            {
-              height: 130,
-              textAlignVertical: "top",
-            },
-          ]}
-          multiline
-          placeholder="Tell employers about yourself..."
-          value={bio}
-          onChangeText={setBio}
-        />
-      </>
-    )}
+          <TextInput
+            style={styles.input}
+            placeholder="Date of Birth (DD/MM/YYYY)"
+            value={dateOfBirth}
+            onChangeText={setDateOfBirth}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nationality"
+            value={nationality}
+            onChangeText={setNationality}
+          />
+
+          <Text style={styles.label}>
+            Languages Spoken
+          </Text>
+
+          <View style={styles.checkboxContainer}>
+            {[
+              "English",
+              "Zulu",
+              "Xhosa",
+              "Sotho",
+              "Tsonga",
+              "Tswana",
+              "Venda",
+              "Ndebele",
+              "Swati",
+              "Shona",
+            ].map((language) => (
+              <View
+                key={language}
+                style={styles.checkboxRow}
+              >
+                <CheckBox
+                  value={languages.includes(
+                    language
+                  )}
+                  onValueChange={() =>
+                    toggleLanguage(language)
+                  }
+                  color="#4CAF50"
+                />
+
+                <Text
+                  style={styles.checkboxLabel}
+                >
+                  {language}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <TextInput
+            style={[
+              styles.input,
+              {
+                height: 130,
+                textAlignVertical: "top",
+              },
+            ]}
+            multiline
+            placeholder="Tell employers about yourself..."
+            value={bio}
+            onChangeText={setBio}
+          />
+        </>
+      )}
 
       {/* ========================= */}
       {/* STEP 2 */}
       {/* ========================= */}
 
-          {step === 2 && (
-      <>
-        <Text style={styles.section}>Location</Text>
+      {step === 2 && (
+        <>
+          <Text style={styles.section}>
+            Location
+          </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Street Address"
-          value={streetAddress}
-          onChangeText={setStreetAddress}
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Street Address"
+            value={streetAddress}
+            onChangeText={setStreetAddress}
+          />
 
-        <Text style={styles.label}>Province</Text>
+          <Text style={styles.label}>
+            Province
+          </Text>
 
-        <View style={styles.checkboxContainer}>
-
-          {[
-            "Gauteng",
-            "Western Cape",
-            "KwaZulu-Natal",
-            "Eastern Cape",
-            "Free State",
-            "Limpopo",
-            "Mpumalanga",
-            "North West",
-            "Northern Cape",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                province === item && styles.optionSelected,
-                { marginBottom: 10 },
-              ]}
-              onPress={() => setProvince(item)}
-            >
-              <Text
+          <View style={styles.checkboxContainer}>
+            {[
+              "Gauteng",
+              "Western Cape",
+              "KwaZulu-Natal",
+              "Eastern Cape",
+              "Free State",
+              "Limpopo",
+              "Mpumalanga",
+              "North West",
+              "Northern Cape",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  province === item && styles.optionTextSelected,
+                  styles.optionButton,
+                  province === item &&
+                    styles.optionSelected,
+                  { marginBottom: 10 },
                 ]}
+                onPress={() =>
+                  setProvince(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.optionText,
+                    province === item &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        </View>
+          <TextInput
+            style={styles.input}
+            placeholder="City / Town"
+            value={city}
+            onChangeText={setCity}
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="City / Town"
-          value={city}
-          onChangeText={setCity}
-        />
+          <TextInput
+            style={styles.input}
+            placeholder="Suburb"
+            value={suburb}
+            onChangeText={setSuburb}
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Suburb"
-          value={suburb}
-          onChangeText={setSuburb}
-        />
-
-        <View
-          style={{
-            backgroundColor: "#E8F5E9",
-            padding: 15,
-            borderRadius: 12,
-            marginTop: 10,
-          }}
-        >
-          <Text
+          <View
             style={{
-              color: "#2E7D32",
-              fontWeight: "700",
-              marginBottom: 5,
+              backgroundColor: "#E8F5E9",
+              padding: 15,
+              borderRadius: 12,
+              marginTop: 10,
             }}
           >
-            Why do we ask for your location?
-          </Text>
+            <Text
+              style={{
+                color: "#2E7D32",
+                fontWeight: "700",
+                marginBottom: 5,
+              }}
+            >
+              Why do we ask for your location?
+            </Text>
 
-          <Text style={{ color: "#555", lineHeight: 22 }}>
-            Employers often search for candidates close to them. Your exact address
-            is never shown publicly—only your suburb, city and province.
-          </Text>
-        </View>
-      </>
-    )}
+            <Text
+              style={{
+                color: "#555",
+                lineHeight: 22,
+              }}
+            >
+              Employers often search for candidates
+              close to them. Your exact address is
+              never shown publicly—only your suburb,
+              city and province.
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* ========================= */}
       {/* STEP 3 */}
       {/* ========================= */}
 
-          {step === 3 && (
-      <>
-        <Text style={styles.section}>Employment Information</Text>
+      {step === 3 && (
+        <>
+          <Text style={styles.section}>
+            Employment Information
+          </Text>
 
-        {/* Worker Types */}
+          <Text style={styles.label}>
+            What jobs are you looking for?
+          </Text>
 
-        <Text style={styles.label}>What jobs are you looking for?</Text>
-
-        <View style={styles.optionGrid}>
-          {[
-            "Caregiver",
-            "Nanny",
-            "Babysitter",
-            "Domestic Helper",
-            "Housekeeper",
-            "Cook",
-            "Driver",
-            "Gardener",
-            "Au Pair",
-            "Disability Care",
-            "Elderly Care",
-            "Cleaner",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                workerTypes.includes(item) && styles.optionSelected,
-              ]}
-              onPress={() => toggleWorkerType(item)}
-            >
-              <Text
+          <View style={styles.optionGrid}>
+            {[
+              "Caregiver",
+              "Nanny",
+              "Babysitter",
+              "Domestic Helper",
+              "Housekeeper",
+              "Cook",
+              "Driver",
+              "Gardener",
+              "Au Pair",
+              "Disability Care",
+              "Elderly Care",
+              "Cleaner",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  workerTypes.includes(item) && styles.optionTextSelected,
+                  styles.optionButton,
+                  workerTypes.includes(item) &&
+                    styles.optionSelected,
                 ]}
+                onPress={() =>
+                  toggleWorkerType(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.optionText,
+                    workerTypes.includes(item) &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Experience */}
+          <Text style={styles.label}>
+            Years of Experience
+          </Text>
 
-        <Text style={styles.label}>Years of Experience</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 5"
+            keyboardType="numeric"
+            value={yearsExperience}
+            onChangeText={setYearsExperience}
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 5"
-          keyboardType="numeric"
-          value={yearsExperience}
-          onChangeText={setYearsExperience}
-        />
+          <Text style={styles.label}>
+            Expected Monthly Salary (R)
+          </Text>
 
-        {/* Salary */}
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="e.g. 6500"
+            value={expectedSalary}
+            onChangeText={setExpectedSalary}
+          />
 
-        <Text style={styles.label}>Expected Monthly Salary (R)</Text>
+          <Text style={styles.label}>
+            Languages Spoken
+          </Text>
 
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          placeholder="e.g. 6500"
-          value={expectedSalary}
-          onChangeText={setExpectedSalary}
-        />
-
-        {/* Languages */}
-
-        <Text style={styles.label}>Languages Spoken</Text>
-
-        <View style={styles.optionGrid}>
-          {[
-             "English",
+          <View style={styles.optionGrid}>
+            {[
+              "English",
               "isiZulu",
               "isiXhosa",
               "Afrikaans",
-              "Xitsonga",
+              "Tsonga",
               "Sesotho",
               "Setswana",
               "Sepedi",
@@ -725,413 +1192,540 @@ const saveProfile = async () => {
               "Tshivenda",
               "Ndebele",
               "Portuguese",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                languages.includes(item) && styles.optionSelected,
-              ]}
-              onPress={() => toggleLanguage(item)}
-            >
-              <Text
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  languages.includes(item) && styles.optionTextSelected,
+                  styles.optionButton,
+                  languages.includes(item) &&
+                    styles.optionSelected,
                 ]}
+                onPress={() =>
+                  toggleLanguage(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.optionText,
+                    languages.includes(item) &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Skills */}
+          <Text style={styles.label}>
+            Skills
+          </Text>
 
-        <Text style={styles.label}>Skills</Text>
-
-        <View style={styles.optionGrid}>
-          {[
-            "Cooking",
-            "Cleaning",
-            "Laundry",
-            "Ironing",
-            "Child Care",
-            "Infant Care",
-            "Homework Help",
-            "Elderly Care",
-            "Medication",
-            "CPR",
-            "Driving",
-            "Pet Care",
-            "First Aid",
-            "Housekeeping",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                skills.includes(item) && styles.optionSelected,
-              ]}
-              onPress={() => toggleSkill(item)}
-            >
-              <Text
+          <View style={styles.optionGrid}>
+            {[
+              "Cooking",
+              "Cleaning",
+              "Laundry",
+              "Ironing",
+              "Child Care",
+              "Infant Care",
+              "Homework Help",
+              "Elderly Care",
+              "Medication",
+              "CPR",
+              "Driving",
+              "Pet Care",
+              "First Aid",
+              "Housekeeping",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  skills.includes(item) && styles.optionTextSelected,
+                  styles.optionButton,
+                  skills.includes(item) &&
+                    styles.optionSelected,
                 ]}
+                onPress={() =>
+                  toggleSkill(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.optionText,
+                    skills.includes(item) &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Availability */}
+          <Text style={styles.label}>
+            Availability
+          </Text>
 
-        <Text style={styles.label}>Availability</Text>
-
-        <View style={styles.optionGrid}>
-          {[
-            "Available Immediately",
-            "1 Week Notice",
-            "2 Weeks Notice",
-            "1 Month Notice",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                availabilityStatus === item && styles.optionSelected,
-              ]}
-              onPress={() => setAvailabilityStatus(item)}
-            >
-              <Text
+          <View style={styles.optionGrid}>
+            {[
+              "Available Immediately",
+              "1 Week Notice",
+              "2 Weeks Notice",
+              "1 Month Notice",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  availabilityStatus === item && styles.optionTextSelected,
+                  styles.optionButton,
+                  availabilityStatus === item &&
+                    styles.optionSelected,
                 ]}
+                onPress={() =>
+                  setAvailabilityStatus(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.optionText,
+                    availabilityStatus === item &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Work Preference */}
+          <Text style={styles.label}>
+            Work Preference
+          </Text>
 
-        <Text style={styles.label}>Work Preference</Text>
-
-        <View style={styles.optionGrid}>
-          {[
-            "Full Time",
-            "Part Time",
-            "Live In",
-            "Live Out",
-            "Temporary",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.optionButton,
-                workPreferences.includes(item) && styles.optionSelected,
-              ]}
-              onPress={() => toggleWorkPreference(item)}
-            >
-              <Text
+          <View style={styles.optionGrid}>
+            {[
+              "Full Time",
+              "Part Time",
+              "Live In",
+              "Live Out",
+              "Temporary",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
                 style={[
-                  styles.optionText,
-                  workPreferences.includes(item) && styles.optionTextSelected,
+                  styles.optionButton,
+                  workPreferences.includes(item) &&
+                    styles.optionSelected,
                 ]}
+                onPress={() =>
+                  toggleWorkPreference(item)
+                }
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text
+                  style={[
+                    styles.optionText,
+                    workPreferences.includes(item) &&
+                      styles.optionTextSelected,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Shifts */}
+          <Text style={styles.label}>
+            Preferred Shift
+          </Text>
 
-        <Text style={styles.label}>Preferred Shift</Text>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>
+              Day Shift
+            </Text>
 
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Day Shift</Text>
-          <Switch value={dayShift} onValueChange={setDayShift} />
-        </View>
+            <Switch
+              value={dayShift}
+              onValueChange={setDayShift}
+            />
+          </View>
 
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Night Shift</Text>
-          <Switch value={nightShift} onValueChange={setNightShift} />
-        </View>
-      </>
-    )}
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>
+              Night Shift
+            </Text>
+
+            <Switch
+              value={nightShift}
+              onValueChange={setNightShift}
+            />
+          </View>
+        </>
+      )}
 
       {/* ========================= */}
       {/* STEP 4 - DOCUMENTS */}
       {/* ========================= */}
 
       {step === 4 && (
-      <>
-        <Text style={styles.section}>Verification Documents</Text>
-
-        <Text style={styles.infoText}>
-          Upload your documents to improve your chances of getting hired.
-          Verified candidates receive a verification badge after review.
-        </Text>
-
-        {/* Profile Photo */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={pickProfilePhoto}
-        >
-          <Text style={styles.uploadTitle}>📷 Profile Photo</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {profilePhoto
-              ? "✅ Photo Selected"
-              : "Tap to upload a profile picture"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* ID */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={() => pickDocument("id")}
-        >
-          <Text style={styles.uploadTitle}>🪪 South African ID / Passport</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {idDocument
-              ? "✅ Document Uploaded"
-              : "Upload identification"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* CV */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={() => pickDocument("cv")}
-        >
-          <Text style={styles.uploadTitle}>📄 Curriculum Vitae (CV)</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {cv
-              ? "✅ CV Uploaded"
-              : "Upload your latest CV"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Police Clearance */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={() => pickDocument("police")}
-        >
-          <Text style={styles.uploadTitle}>👮 Police Clearance</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {policeClearance
-              ? "✅ Uploaded"
-              : "Optional but highly recommended"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Qualifications */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={() => pickDocument("qualification")}
-        >
-          <Text style={styles.uploadTitle}>🎓 Qualifications</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {qualifications.length} file(s) uploaded
-          </Text>
-        </TouchableOpacity>
-
-        {/* References */}
-
-        <TouchableOpacity
-          style={styles.uploadCard}
-          onPress={() => pickDocument("reference")}
-        >
-          <Text style={styles.uploadTitle}>👥 References</Text>
-
-          <Text style={styles.uploadSubtitle}>
-            {references.length} reference(s) uploaded
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.verificationBox}>
-          <Text style={styles.verificationTitle}>
-            ✔ Verification Benefits
+        <>
+          <Text style={styles.section}>
+            Verification Documents
           </Text>
 
-          <Text style={styles.verificationText}>
-            • Verification Badge{"\n"}
-            • Higher search ranking{"\n"}
-            • More employer trust{"\n"}
-            • Better chances of getting hired
+          <Text style={styles.infoText}>
+            Upload your documents to improve your
+            chances of getting hired. Verified
+            candidates receive a verification badge
+            after review.
           </Text>
-        </View>
-      </>
-    )}
+
+          {/* Profile Photo */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={pickProfilePhoto}
+          >
+            <Text style={styles.uploadTitle}>
+              📷 Profile Photo
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {profilePhoto
+                ? "✅ Photo Selected"
+                : "Tap to upload a profile picture"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* ID */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={() =>
+              pickDocument("id")
+            }
+          >
+            <Text style={styles.uploadTitle}>
+              🪪 South African ID / Passport
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {idDocument
+                ? "✅ Document Uploaded"
+                : "Upload identification"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* CV */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={() =>
+              pickDocument("cv")
+            }
+          >
+            <Text style={styles.uploadTitle}>
+              📄 Curriculum Vitae (CV)
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {cv
+                ? "✅ CV Uploaded"
+                : "Upload your latest CV"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Police Clearance */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={() =>
+              pickDocument("police")
+            }
+          >
+            <Text style={styles.uploadTitle}>
+              👮 Police Clearance
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {policeClearance
+                ? "✅ Uploaded"
+                : "Optional but highly recommended"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Qualifications */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={() =>
+              pickDocument("qualification")
+            }
+          >
+            <Text style={styles.uploadTitle}>
+              🎓 Qualifications
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {qualifications.length} file(s)
+              uploaded
+            </Text>
+          </TouchableOpacity>
+
+          {/* References */}
+
+          <TouchableOpacity
+            style={styles.uploadCard}
+            onPress={() =>
+              pickDocument("reference")
+            }
+          >
+            <Text style={styles.uploadTitle}>
+              👥 References
+            </Text>
+
+            <Text style={styles.uploadSubtitle}>
+              {references.length} reference(s)
+              uploaded
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={styles.verificationBox}
+          >
+            <Text
+              style={styles.verificationTitle}
+            >
+              ✔ Verification Benefits
+            </Text>
+
+            <Text
+              style={styles.verificationText}
+            >
+              • Verification Badge{"\n"}
+              • Higher search ranking{"\n"}
+              • More employer trust{"\n"}
+              • Better chances of getting hired
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* ========================= */}
       {/* STEP 5 - REVIEW */}
       {/* ========================= */}
 
       {step === 5 && (
-      <>
-        <Text style={styles.section}>Review Your Profile</Text>
-
-        <Text style={styles.infoText}>
-          Please review all the information below before creating your profile.
-        </Text>
-
-        {/* Personal */}
-
-        <View style={styles.reviewCard}>
-          <Text style={styles.reviewHeading}>👤 Personal Information</Text>
-
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Name:</Text> {firstName} {surname}
+        <>
+          <Text style={styles.section}>
+            Review Your Profile
           </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Gender:</Text> {gender}
+          <Text style={styles.infoText}>
+            Please review all the information below
+            before creating your profile.
           </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Date of Birth:</Text> {dateOfBirth}
-          </Text>
+          {/* Personal */}
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Nationality:</Text> {nationality}
-          </Text>
+          <View style={styles.reviewCard}>
+            <Text style={styles.reviewHeading}>
+              👤 Personal Information
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Languages:</Text>{" "}
-            {languages.join(", ")}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Name:
+              </Text>{" "}
+              {firstName} {surname}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>About Me:</Text> {bio}
-          </Text>
-        </View>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Gender:
+              </Text>{" "}
+              {gender}
+            </Text>
 
-        {/* Location */}
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Date of Birth:
+              </Text>{" "}
+              {dateOfBirth}
+            </Text>
 
-        <View style={styles.reviewCard}>
-          <Text style={styles.reviewHeading}>📍 Location</Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Nationality:
+              </Text>{" "}
+              {nationality}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Province:</Text> {province}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Languages:
+              </Text>{" "}
+              {languages.join(", ")}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>City:</Text> {city}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                About Me:
+              </Text>{" "}
+              {bio}
+            </Text>
+          </View>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Suburb:</Text> {suburb}
-          </Text>
+          {/* Location */}
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Street:</Text> {streetAddress}
-          </Text>
-        </View>
+          <View style={styles.reviewCard}>
+            <Text style={styles.reviewHeading}>
+              📍 Location
+            </Text>
 
-        {/* Employment */}
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Province:
+              </Text>{" "}
+              {province}
+            </Text>
 
-        <View style={styles.reviewCard}>
-          <Text style={styles.reviewHeading}>💼 Employment</Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                City:
+              </Text>{" "}
+              {city}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Worker Types:</Text>{" "}
-            {workerTypes.join(", ")}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Suburb:
+              </Text>{" "}
+              {suburb}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Skills:</Text>{" "}
-            {skills.join(", ")}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Street:
+              </Text>{" "}
+              {streetAddress}
+            </Text>
+          </View>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Experience:</Text>{" "}
-            {yearsExperience} years
-          </Text>
+          {/* Employment */}
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Expected Salary:</Text> R{" "}
-            {expectedSalary}
-          </Text>
+          <View style={styles.reviewCard}>
+            <Text style={styles.reviewHeading}>
+              💼 Employment
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Availability:</Text>{" "}
-            {availabilityStatus}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Worker Types:
+              </Text>{" "}
+              {workerTypes.join(", ")}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Work Preference:</Text>{" "}
-            {workPreferences.join(", ")}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Skills:
+              </Text>{" "}
+              {skills.join(", ")}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Day Shift:</Text>{" "}
-            {dayShift ? "Yes" : "No"}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Experience:
+              </Text>{" "}
+              {yearsExperience} years
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>Night Shift:</Text>{" "}
-            {nightShift ? "Yes" : "No"}
-          </Text>
-        </View>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Expected Salary:
+              </Text>{" "}
+              R {expectedSalary}
+            </Text>
 
-        {/* Documents */}
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Availability:
+              </Text>{" "}
+              {availabilityStatus}
+            </Text>
 
-        <View style={styles.reviewCard}>
-          <Text style={styles.reviewHeading}>📂 Verification</Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Work Preference:
+              </Text>{" "}
+              {workPreferences.join(", ")}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            Profile Photo: {profilePhoto ? "✅" : "❌"}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Day Shift:
+              </Text>{" "}
+              {dayShift ? "Yes" : "No"}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            ID Document: {idDocument ? "✅" : "❌"}
-          </Text>
+            <Text style={styles.reviewItem}>
+              <Text style={styles.reviewLabel}>
+                Night Shift:
+              </Text>{" "}
+              {nightShift ? "Yes" : "No"}
+            </Text>
+          </View>
 
-          <Text style={styles.reviewItem}>
-            CV: {cv ? "✅" : "❌"}
-          </Text>
+          {/* Documents */}
 
-          <Text style={styles.reviewItem}>
-            Police Clearance: {policeClearance ? "✅" : "❌"}
-          </Text>
+          <View style={styles.reviewCard}>
+            <Text style={styles.reviewHeading}>
+              📂 Verification
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            Qualifications: {qualifications.length}
-          </Text>
+            <Text style={styles.reviewItem}>
+              Profile Photo:{" "}
+              {profilePhoto ? "✅" : "❌"}
+            </Text>
 
-          <Text style={styles.reviewItem}>
-            References: {references.length}
-          </Text>
-        </View>
+            <Text style={styles.reviewItem}>
+              ID Document:{" "}
+              {idDocument ? "✅" : "❌"}
+            </Text>
 
-        <View style={styles.successBox}>
-          <Text style={styles.successTitle}>
-            🎉 You're Ready!
-          </Text>
+            <Text style={styles.reviewItem}>
+              CV: {cv ? "✅" : "❌"}
+            </Text>
 
-          <Text style={styles.successText}>
-            Tap "Create Profile" below to publish your profile and start receiving opportunities from employers.
-          </Text>
-        </View>
-      </>
-    )}
+            <Text style={styles.reviewItem}>
+              Police Clearance:{" "}
+              {policeClearance
+                ? "✅"
+                : "❌"}
+            </Text>
+
+            <Text style={styles.reviewItem}>
+              Qualifications:{" "}
+              {qualifications.length}
+            </Text>
+
+            <Text style={styles.reviewItem}>
+              References:{" "}
+              {references.length}
+            </Text>
+          </View>
+
+          <View style={styles.successBox}>
+            <Text style={styles.successTitle}>
+              🎉 You're Ready!
+            </Text>
+
+            <Text style={styles.successText}>
+              Tap "Create Profile" below to publish
+              your profile and start receiving
+              opportunities from employers.
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* ========================= */}
       {/* NAVIGATION */}
@@ -1143,19 +1737,35 @@ const saveProfile = async () => {
             style={styles.previousButton}
             onPress={previousStep}
           >
-            <Text style={styles.previousButtonText}>← Previous</Text>
+            <Text
+              style={styles.previousButtonText}
+            >
+              ← Previous
+            </Text>
           </TouchableOpacity>
         )}
 
         {step < 5 ? (
-          <TouchableOpacity style={styles.nextButton} onPress={nextStep}>
-            <Text style={styles.nextButtonText}>Next →</Text>
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={nextStep}
+          >
+            <Text style={styles.nextButtonText}>
+              Next →
+            </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.saveButton} onPress={saveProfile}>
-           <Text style={styles.saveButtonText}>
-          {profileExists ? "✔ Update Profile" : "✔ Create Profile"}
-        </Text> 
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={saveProfile}
+          >
+            <Text
+              style={styles.saveButtonText}
+            >
+              {profileExists
+                ? "✔ Update Profile"
+                : "✔ Create Profile"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -1164,6 +1774,10 @@ const saveProfile = async () => {
     </ScrollView>
   );
 }
+
+// =====================================
+// STYLES
+// =====================================
 
 const styles = StyleSheet.create({
   container: {
@@ -1183,6 +1797,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: "#555",
+    textAlign: "center",
+    paddingHorizontal: 20,
   },
 
   heading: {
@@ -1312,7 +1928,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 20,
     marginBottom: 30,
-
     shadowColor: "#000",
     shadowOpacity: 0.08,
     shadowRadius: 5,
@@ -1320,7 +1935,6 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-
     elevation: 3,
   },
 
@@ -1391,10 +2005,10 @@ const styles = StyleSheet.create({
   },
 
   label: {
-  fontSize: 17,
-  fontWeight: "700",
-  color: "#333",
-  marginBottom: 15,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 15,
   },
 
   checkboxContainer: {
@@ -1417,9 +2031,9 @@ const styles = StyleSheet.create({
   },
 
   optionGrid: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  marginBottom: 20,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 20,
   },
 
   optionButton: {
@@ -1447,10 +2061,10 @@ const styles = StyleSheet.create({
   },
 
   infoText: {
-  color: "#666",
-  fontSize: 15,
-  marginBottom: 20,
-  lineHeight: 22,
+    color: "#666",
+    fontSize: 15,
+    marginBottom: 20,
+    lineHeight: 22,
   },
 
   uploadCard: {
@@ -1495,12 +2109,12 @@ const styles = StyleSheet.create({
   },
 
   reviewCard: {
-  backgroundColor: "#FFFFFF",
-  borderRadius: 16,
-  padding: 18,
-  marginBottom: 18,
-  borderWidth: 1,
-  borderColor: "#EEEEEE",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#EEEEEE",
   },
 
   reviewHeading: {

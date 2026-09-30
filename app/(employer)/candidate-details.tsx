@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -33,6 +34,25 @@ export default function CandidateDetails() {
     useState(false);
 
   const [saved, setSaved] = useState(false);
+
+    // ==========================================
+  // RATING
+  // ==========================================
+
+  const [selectedRating, setSelectedRating] =
+    useState(0);
+
+  const [reviewComment, setReviewComment] =
+    useState("");
+
+  const [submittingReview, setSubmittingReview] =
+    useState(false);
+
+  const [hasReviewed, setHasReviewed] =
+    useState(false);
+
+  const [myReview, setMyReview] =
+    useState<any>(null);
 
   const loadCandidate = async () => {
     try {
@@ -71,15 +91,161 @@ export default function CandidateDetails() {
         `Bearer ${token}`;
 
       const response = await API.get(
-        "/subscription/my-subscription"
+        "/subscriptions/my-subscription"
+      );
+
+      console.log(
+        "MY SUBSCRIPTION RESPONSE:",
+        response.data
       );
 
       setSubscriptionActive(
         response.data.subscriptionStatus === "active"
       );
 
-    } catch (err) {
+      } catch (err: any) {
+      console.log(
+        "SUBSCRIPTION CHECK ERROR:",
+        err?.response?.status,
+        err?.response?.data || err?.message
+      );
+
       setSubscriptionActive(false);
+    }
+  };
+
+    // ==========================================
+  // LOAD CANDIDATE REVIEWS
+  // ==========================================
+
+  const loadReviews = async () => {
+    try {
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (!token || !id) {
+        return;
+      }
+
+      API.defaults.headers.common.Authorization =
+        `Bearer ${token}`;
+
+      const response = await API.get(
+        `/reviews/candidate/${id}`
+      );
+
+      const reviews =
+        response.data?.reviews || [];
+
+      const currentUser =
+        JSON.parse(
+          (await AsyncStorage.getItem("user")) || "{}"
+        );
+
+      const existingReview =
+        reviews.find(
+          (review: any) =>
+            String(review.employer?._id) ===
+            String(currentUser._id)
+        );
+
+      if (existingReview) {
+        setHasReviewed(true);
+        setMyReview(existingReview);
+      } else {
+        setHasReviewed(false);
+        setMyReview(null);
+      }
+
+    } catch (err: any) {
+      console.log(
+        "LOAD REVIEWS ERROR:",
+        err?.response?.data ||
+          err?.message
+      );
+    }
+  };
+
+    // ==========================================
+  // SUBMIT RATING
+  // ==========================================
+
+  const submitReview = async () => {
+    if (!candidate?._id) {
+      Alert.alert(
+        "Error",
+        "Candidate information is missing."
+      );
+      return;
+    }
+
+    if (
+      selectedRating < 1 ||
+      selectedRating > 5
+    ) {
+      Alert.alert(
+        "Rating Required",
+        "Please select a rating from 1 to 5 stars."
+      );
+      return;
+    }
+
+    try {
+      setSubmittingReview(true);
+
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert(
+          "Error",
+          "You are not logged in."
+        );
+        return;
+      }
+
+      API.defaults.headers.common.Authorization =
+        `Bearer ${token}`;
+
+      const response = await API.post(
+        "/reviews",
+        {
+          candidateId: candidate._id,
+          rating: selectedRating,
+          comment: reviewComment.trim(),
+        }
+      );
+
+      Alert.alert(
+        "Rating Submitted",
+        "Thank you. Your rating has been submitted successfully."
+      );
+
+      setHasReviewed(true);
+      setMyReview(response.data?.review || {
+        rating: selectedRating,
+        comment: reviewComment.trim(),
+      });
+
+      // Refresh candidate profile so the
+      // new average rating appears immediately.
+      await loadCandidate();
+
+    } catch (err: any) {
+      console.log(
+        "SUBMIT REVIEW ERROR:",
+        err?.response?.data ||
+          err?.message
+      );
+
+      Alert.alert(
+        "Unable to Submit Rating",
+        err?.response?.data?.message ||
+          "Something went wrong while submitting your rating."
+      );
+
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -140,6 +306,7 @@ const saveCandidate = async () => {
   useEffect(() => {
     loadCandidate();
     checkSubscription();
+    loadReviews();
   }, []);
 
 
@@ -400,7 +567,7 @@ const saveCandidate = async () => {
       </Text>
     </View>
 
-    {/* ========================= */}
+        {/* ========================= */}
     {/* RATING */}
     {/* ========================= */}
 
@@ -410,12 +577,119 @@ const saveCandidate = async () => {
       </Text>
 
       <Text style={styles.rating}>
-        ⭐ {candidate.averageRating} / 5
+        ⭐ {candidate.averageRating || 0} / 5
       </Text>
 
       <Text style={styles.text}>
-        {candidate.totalReviews} Reviews
+        {candidate.totalReviews || 0} Reviews
       </Text>
+
+      {/* ================================= */}
+      {/* EXISTING REVIEW */}
+      {/* ================================= */}
+
+      {hasReviewed && myReview ? (
+        <View style={styles.myReviewBox}>
+          <Text style={styles.myReviewTitle}>
+            Your Review
+          </Text>
+
+          <Text style={styles.myReviewStars}>
+            {"⭐".repeat(myReview.rating || 0)}
+          </Text>
+
+          {myReview.comment ? (
+            <Text style={styles.myReviewComment}>
+              "{myReview.comment}"
+            </Text>
+          ) : (
+            <Text style={styles.noComment}>
+              No comment provided.
+            </Text>
+          )}
+
+          <Text style={styles.reviewSubmitted}>
+            You have already rated this candidate.
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* ================================= */}
+          {/* RATE CANDIDATE */}
+          {/* ================================= */}
+
+          <Text style={styles.rateHeading}>
+            Rate this Candidate
+          </Text>
+
+          <View style={styles.starRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity
+                key={star}
+                onPress={() =>
+                  setSelectedRating(star)
+                }
+                style={styles.starButton}
+                disabled={submittingReview}
+              >
+                <Text
+                  style={[
+                    styles.star,
+                    star <= selectedRating &&
+                      styles.selectedStar,
+                  ]}
+                >
+                  ★
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.ratingInstruction}>
+            {selectedRating === 0
+              ? "Select a rating"
+              : `${selectedRating} out of 5 stars`}
+          </Text>
+
+          <TextInput
+            style={styles.reviewInput}
+            placeholder="Write an optional comment..."
+            placeholderTextColor="#888"
+            value={reviewComment}
+            onChangeText={setReviewComment}
+            multiline
+            numberOfLines={4}
+            maxLength={500}
+            editable={!submittingReview}
+          />
+
+          <Text style={styles.characterCount}>
+            {reviewComment.length}/500
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.submitReviewButton,
+              (selectedRating === 0 ||
+                submittingReview) &&
+                styles.submitReviewButtonDisabled,
+            ]}
+            onPress={submitReview}
+            disabled={
+              selectedRating === 0 ||
+              submittingReview
+            }
+          >
+            {submittingReview ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.submitReviewText}>
+                ⭐ Submit Rating
+              </Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
     </View>
 
     {/* ========================= */}
@@ -580,6 +854,121 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#F9A825",
     marginBottom: 6,
+  },
+
+    rateHeading: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+    marginTop: 20,
+    marginBottom: 12,
+  },
+
+  starRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+
+  starButton: {
+    paddingHorizontal: 5,
+  },
+
+  star: {
+    fontSize: 38,
+    color: "#D0D0D0",
+  },
+
+  selectedStar: {
+    color: "#FFC107",
+  },
+
+  ratingInstruction: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 14,
+    marginBottom: 15,
+  },
+
+  reviewInput: {
+    backgroundColor: "#F8F8F8",
+    borderWidth: 1,
+    borderColor: "#DDD",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 100,
+    fontSize: 15,
+    color: "#333",
+    textAlignVertical: "top",
+  },
+
+  characterCount: {
+    textAlign: "right",
+    color: "#888",
+    fontSize: 12,
+    marginTop: 5,
+  },
+
+  submitReviewButton: {
+    backgroundColor: "#2E7D32",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 12,
+  },
+
+  submitReviewButtonDisabled: {
+    backgroundColor: "#A5A5A5",
+  },
+
+  submitReviewText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+
+  myReviewBox: {
+    backgroundColor: "#F6F8FA",
+    borderRadius: 12,
+    padding: 15,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+
+  myReviewTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+  },
+
+  myReviewStars: {
+    fontSize: 24,
+    color: "#FFC107",
+    marginBottom: 8,
+  },
+
+  myReviewComment: {
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
+    fontStyle: "italic",
+  },
+
+  noComment: {
+    fontSize: 14,
+    color: "#777",
+    fontStyle: "italic",
+  },
+
+  reviewSubmitted: {
+    fontSize: 13,
+    color: "#2E7D32",
+    fontWeight: "600",
+    marginTop: 10,
   },
 
   contactButton: {

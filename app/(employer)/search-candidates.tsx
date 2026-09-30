@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -73,7 +73,7 @@ export default function SearchCandidates() {
     "English",
     "Zulu",
     "Xhosa",
-    "Xitsonga",
+    "Tsonga",
     "Venda",
     "Tswana",
     "Sotho",
@@ -89,23 +89,43 @@ export default function SearchCandidates() {
   const searchCandidates = async () => {
     try {
       setLoading(true);
+
       const token = await AsyncStorage.getItem("token");
+
       API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       const params = new URLSearchParams();
-      if (workerType) params.append("workerType", workerType);
-      if (province) params.append("province", province);
-      if (employment) params.append("employment", employment);
-      if (gender) params.append("gender", gender);
-      if (language) params.append("language", language);
+
+      if (workerType) {
+        params.append("workerType", workerType);
+      }
+
+      if (province) {
+        params.append("province", province);
+      }
+
+      if (employment) {
+        params.append("employment", employment);
+      }
+
+      if (gender) {
+        params.append("gender", gender);
+      }
+
+      if (language) {
+        params.append("language", language);
+      }
+
       if (verifiedOnly) {
         params.append("verified", "true");
       }
 
       const res = await API.get(`/profiles/search?${params.toString()}`);
+
       setCandidates(res.data);
     } catch (err: any) {
       console.log(err?.response?.data);
+
       Alert.alert(
         "Search Failed",
         err?.response?.data?.message || "Unable to search candidates."
@@ -119,8 +139,12 @@ export default function SearchCandidates() {
   // UI
   // ==========================================================
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.heading}>Search Candidates</Text>
+
       <Text style={styles.subHeading}>
         Find the perfect candidate for your family or business.
       </Text>
@@ -129,14 +153,21 @@ export default function SearchCandidates() {
       {/* WORKER TYPE */}
       {/* ======================================= */}
       <Text style={styles.label}>Worker Type</Text>
+
       <View style={styles.pickerContainer}>
         <Picker
+          style={styles.picker}
           selectedValue={workerType}
           onValueChange={(itemValue) => setWorkerType(itemValue)}
         >
           <Picker.Item label="Any Worker Type" value="" />
+
           {workerTypes.map((item) => (
-            <Picker.Item key={item} label={item} value={item} />
+            <Picker.Item
+              key={item}
+              label={item}
+              value={item}
+            />
           ))}
         </Picker>
       </View>
@@ -145,14 +176,21 @@ export default function SearchCandidates() {
       {/* PROVINCE */}
       {/* ======================================= */}
       <Text style={styles.label}>Province</Text>
+
       <View style={styles.pickerContainer}>
         <Picker
+          style={styles.picker}
           selectedValue={province}
           onValueChange={(itemValue) => setProvince(itemValue)}
         >
           <Picker.Item label="Any Province" value="" />
+
           {provinces.map((item) => (
-            <Picker.Item key={item} label={item} value={item} />
+            <Picker.Item
+              key={item}
+              label={item}
+              value={item}
+            />
           ))}
         </Picker>
       </View>
@@ -161,14 +199,21 @@ export default function SearchCandidates() {
       {/* EMPLOYMENT */}
       {/* ======================================= */}
       <Text style={styles.label}>Employment Preference</Text>
+
       <View style={styles.pickerContainer}>
         <Picker
+          style={styles.picker}
           selectedValue={employment}
           onValueChange={(itemValue) => setEmployment(itemValue)}
         >
           <Picker.Item label="Any Employment" value="" />
+
           {employmentOptions.map((item) => (
-            <Picker.Item key={item} label={item} value={item} />
+            <Picker.Item
+              key={item}
+              label={item}
+              value={item}
+            />
           ))}
         </Picker>
       </View>
@@ -177,8 +222,10 @@ export default function SearchCandidates() {
       {/* GENDER */}
       {/* ======================================= */}
       <Text style={styles.label}>Gender</Text>
+
       <View style={styles.pickerContainer}>
         <Picker
+          style={styles.picker}
           selectedValue={gender}
           onValueChange={(itemValue) => setGender(itemValue)}
         >
@@ -192,14 +239,21 @@ export default function SearchCandidates() {
       {/* LANGUAGE */}
       {/* ======================================= */}
       <Text style={styles.label}>Language</Text>
+
       <View style={styles.pickerContainer}>
         <Picker
+          style={styles.picker}
           selectedValue={language}
           onValueChange={(itemValue) => setLanguage(itemValue)}
         >
           <Picker.Item label="Any Language" value="" />
+
           {languages.map((item) => (
-            <Picker.Item key={item} label={item} value={item} />
+            <Picker.Item
+              key={item}
+              label={item}
+              value={item}
+            />
           ))}
         </Picker>
       </View>
@@ -208,8 +262,14 @@ export default function SearchCandidates() {
       {/* VERIFIED */}
       {/* ======================================= */}
       <View style={styles.switchRow}>
-        <Text style={styles.switchText}>Verified Candidates Only</Text>
-        <Switch value={verifiedOnly} onValueChange={setVerifiedOnly} />
+        <Text style={styles.switchText}>
+          Verified Candidates Only
+        </Text>
+
+        <Switch
+          value={verifiedOnly}
+          onValueChange={setVerifiedOnly}
+        />
       </View>
 
       {/* ======================================= */}
@@ -223,7 +283,9 @@ export default function SearchCandidates() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.searchButtonText}>Search Candidates</Text>
+          <Text style={styles.searchButtonText}>
+            Search Candidates
+          </Text>
         )}
       </TouchableOpacity>
 
@@ -231,31 +293,44 @@ export default function SearchCandidates() {
       {/* RESULTS */}
       {/* ======================================= */}
       {candidates.map((candidate: any) => (
-        <View key={candidate._id} style={styles.card}>
+        <View
+          key={candidate._id}
+          style={styles.card}
+        >
           <Text style={styles.name}>
-             {candidate.firstName || "Candidate"}
+            {candidate.firstName || "Candidate"}
           </Text>
+
           <Text style={styles.detail}>
             💼 {candidate.workerTypes?.join(", ")}
           </Text>
+
           <Text style={styles.detail}>
             📍 {candidate.city}, {candidate.province}
           </Text>
+
           <Text style={styles.detail}>
             ⭐ {candidate.yearsExperience} Years Experience
           </Text>
+
           <Text style={styles.detail}>
             🌍 {candidate.languages?.join(", ")}
           </Text>
+
           <Text style={styles.detail}>
             💰 Expected Salary: R{candidate.expectedSalary}
           </Text>
+
           <Text style={styles.detail}>
             🟢 {candidate.availabilityStatus}
           </Text>
+
           {candidate.profileVerified && (
-            <Text style={styles.verified}>✔ Verified Candidate</Text>
+            <Text style={styles.verified}>
+              ✔ Verified Candidate
+            </Text>
           )}
+
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() =>
@@ -267,14 +342,22 @@ export default function SearchCandidates() {
               })
             }
           >
-            <Text style={styles.profileButtonText}>View Profile</Text>
+            <Text style={styles.profileButtonText}>
+              View Profile
+            </Text>
           </TouchableOpacity>
         </View>
       ))}
 
+      {/* ======================================= */}
+      {/* EMPTY RESULTS */}
+      {/* ======================================= */}
       {!loading && candidates.length === 0 && (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No Candidates Found</Text>
+          <Text style={styles.emptyTitle}>
+            No Candidates Found
+          </Text>
+
           <Text style={styles.emptyText}>
             Try changing your search filters.
           </Text>
@@ -290,18 +373,21 @@ const styles = StyleSheet.create({
     backgroundColor: "#F6F8FA",
     padding: 18,
   },
+
   heading: {
     fontSize: 30,
     fontWeight: "bold",
     color: "#2E7D32",
     marginTop: 10,
   },
+
   subHeading: {
     fontSize: 16,
     color: "#666",
     marginBottom: 25,
     marginTop: 5,
   },
+
   label: {
     fontSize: 16,
     fontWeight: "700",
@@ -309,6 +395,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 12,
   },
+
   pickerContainer: {
     backgroundColor: "#FFF",
     borderRadius: 12,
@@ -317,6 +404,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     overflow: "hidden",
   },
+
+  picker: {
+    color: "#222",
+    backgroundColor: "#FFF",
+  },
+
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -327,11 +420,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 20,
   },
+
   switchText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
   },
+
   searchButton: {
     backgroundColor: "#2E7D32",
     paddingVertical: 16,
@@ -340,11 +435,13 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     elevation: 3,
   },
+
   searchButtonText: {
     color: "#FFF",
     fontWeight: "bold",
     fontSize: 17,
   },
+
   card: {
     backgroundColor: "#FFF",
     borderRadius: 16,
@@ -359,18 +456,21 @@ const styles = StyleSheet.create({
       height: 2,
     },
   },
+
   name: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#222",
     marginBottom: 12,
   },
+
   detail: {
     fontSize: 15,
     color: "#555",
     marginBottom: 7,
     lineHeight: 22,
   },
+
   verified: {
     color: "#2E7D32",
     fontWeight: "bold",
@@ -378,6 +478,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 15,
   },
+
   profileButton: {
     backgroundColor: "#2E7D32",
     paddingVertical: 14,
@@ -385,11 +486,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
+
   profileButtonText: {
     color: "#FFF",
     fontWeight: "bold",
     fontSize: 16,
   },
+
   emptyCard: {
     backgroundColor: "#FFF",
     padding: 35,
@@ -397,12 +500,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
+
   emptyTitle: {
     fontSize: 22,
     fontWeight: "bold",
     color: "#444",
     marginBottom: 10,
   },
+
   emptyText: {
     fontSize: 15,
     color: "#777",
