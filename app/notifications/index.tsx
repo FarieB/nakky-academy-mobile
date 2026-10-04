@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,7 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   // ==========================
   // Fetch Notifications
@@ -33,7 +35,10 @@ export default function NotificationsScreen() {
     try {
       const token = await AsyncStorage.getItem("token");
 
-      if (!token) return;
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
       API.defaults.headers.common[
         "Authorization"
@@ -41,7 +46,13 @@ export default function NotificationsScreen() {
 
       const res = await API.get("/notifications");
 
-      setNotifications(res.data);
+      // Show maximum 20 notifications
+      setNotifications(
+        Array.isArray(res.data)
+          ? res.data.slice(0, 20)
+          : []
+      );
+
     } catch (err: any) {
       console.log(
         "NOTIFICATION ERROR:",
@@ -53,17 +64,29 @@ export default function NotificationsScreen() {
     }
   };
 
-useEffect(() => {
+  // ==========================
+  // Initial Load + Socket
+  // ==========================
+
+  useEffect(() => {
     fetchNotifications();
 
     startNotificationListener((notification) => {
-      setNotifications((prev) => [notification, ...prev]);
+      setNotifications((prev) => {
+        const updated = [
+          notification,
+          ...prev,
+        ];
+
+        // Keep maximum of 20
+        return updated.slice(0, 20);
+      });
     });
 
     return () => {
       stopNotificationListener();
     };
-  }, []); 
+  }, []);
 
   // ==========================
   // Pull To Refresh
@@ -73,6 +96,76 @@ useEffect(() => {
     setRefreshing(true);
     fetchNotifications();
   }, []);
+
+  // ==========================
+  // Clear All Notifications
+  // ==========================
+
+  const clearAllNotifications = () => {
+    if (notifications.length === 0) {
+      return;
+    }
+
+    Alert.alert(
+      "Clear Notifications",
+      "Are you sure you want to clear all your notifications?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Clear All",
+          style: "destructive",
+          onPress: confirmClearAll,
+        },
+      ]
+    );
+  };
+
+  // ==========================
+  // Confirm Clear All
+  // ==========================
+
+  const confirmClearAll = async () => {
+    try {
+      setClearing(true);
+
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (!token) {
+        return;
+      }
+
+      API.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${token}`;
+
+      await API.delete("/notifications");
+
+      // Immediately clear the screen
+      setNotifications([]);
+
+      console.log(
+        "All notifications cleared successfully."
+      );
+
+    } catch (err: any) {
+      console.log(
+        "CLEAR NOTIFICATIONS ERROR:",
+        err?.response?.data || err.message
+      );
+
+      Alert.alert(
+        "Error",
+        "Unable to clear notifications. Please try again."
+      );
+
+    } finally {
+      setClearing(false);
+    }
+  };
 
   // ==========================
   // Notification Icons
@@ -139,10 +232,17 @@ useEffect(() => {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#E91E63" />
+        <ActivityIndicator
+          size="large"
+          color="#E91E63"
+        />
       </View>
     );
   }
+
+  // ==========================
+  // SCREEN
+  // ==========================
 
   return (
     <ScrollView
@@ -154,17 +254,62 @@ useEffect(() => {
         />
       }
     >
-      <Text style={styles.title}>
-        🔔 Notifications
-      </Text>
 
       {/* ========================== */}
-      {/* Empty State */}
+      {/* HEADER */}
+      {/* ========================== */}
+
+      <View style={styles.headerRow}>
+
+        <Text style={styles.title}>
+          🔔 Notifications
+        </Text>
+
+        {notifications.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={clearAllNotifications}
+            disabled={clearing}
+          >
+            <Text style={styles.clearButtonText}>
+              {clearing
+                ? "Clearing..."
+                : "Clear All"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+      </View>
+
+      {/* ========================== */}
+      {/* INFO */}
+      {/* ========================== */}
+
+      {notifications.length > 0 && (
+        <Text style={styles.limitText}>
+          Showing your latest{" "}
+          {notifications.length}{" "}
+          notification
+          {notifications.length === 1
+            ? ""
+            : "s"}
+          {notifications.length === 20
+            ? " (maximum 20)"
+            : ""}
+          .
+        </Text>
+      )}
+
+      {/* ========================== */}
+      {/* EMPTY STATE */}
       {/* ========================== */}
 
       {notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🔔</Text>
+
+          <Text style={styles.emptyIcon}>
+            🔔
+          </Text>
 
           <Text style={styles.emptyTitle}>
             No Notifications
@@ -173,80 +318,134 @@ useEffect(() => {
           <Text style={styles.emptyText}>
             You're all caught up.
           </Text>
+
         </View>
       ) : (
+
+        // ==========================
+        // NOTIFICATIONS
+        // ==========================
+
         notifications.map((notification) => (
+
           <TouchableOpacity
             key={notification._id}
             activeOpacity={0.8}
             onPress={async () => {
+
               try {
+
+                // ==========================
                 // Mark as read
+                // ==========================
+
                 if (!notification.isRead) {
+
                   await API.put(
                     `/notifications/${notification._id}/read`
                   );
+
+                  // Immediately update local state
+                  setNotifications((prev) =>
+                    prev.map((item) =>
+                      item._id === notification._id
+                        ? {
+                            ...item,
+                            isRead: true,
+                          }
+                        : item
+                    )
+                  );
                 }
 
-                // Refresh notifications
-                fetchNotifications();
-
+                // ==========================
                 // Navigate according to action
-                switch (notification.action) {
+                // ==========================
+
+                switch (
+                  notification.action
+                ) {
+
                   case "open_chat":
+
                     router.push({
-                      pathname: "/messaging/[userId]",
+                      pathname:
+                        "/messaging/[userId]",
                       params: {
                         userId:
-                          notification.actionData?.userId,
+                          notification
+                            .actionData
+                            ?.userId,
                       },
                     });
+
                     break;
 
                   case "open_profile":
-                    router.push({
-                      pathname:
-                        "/(candidate)/profile-builder",
-                    });
+
+                    router.push(
+                      "/(candidate)/profile-builder"
+                    );
+
                     break;
 
                   case "open_subscription":
+
                     router.push(
                       "/(employer)/subscribe"
                     );
+
                     break;
 
                   case "open_documents":
+
                     router.push(
                       "/(candidate)/upload-documents"
                     );
+
                     break;
 
                   case "open_verification":
+
                     router.push(
                       "/admin/verifications"
                     );
+
                     break;
 
                   case "open_course":
-                   router.push("/student/courses");
+
+                    router.push(
+                      "/student/courses"
+                    );
+
                     break;
 
                   case "open_certificate":
-                    router.push("/student/courses");
+
+                    router.push(
+                      "/student/courses"
+                    );
+
                     break;
 
                   default:
                     break;
                 }
+
               } catch (err: any) {
+
                 console.log(
                   "NOTIFICATION OPEN ERROR:",
-                  err?.response?.data || err.message
+                  err?.response?.data ||
+                    err.message
                 );
+
               }
+
             }}
           >
+
             <View
               style={[
                 styles.card,
@@ -254,32 +453,60 @@ useEffect(() => {
                   styles.unreadCard,
               ]}
             >
+
               <Text style={styles.icon}>
-                {getIcon(notification.type)}
+                {getIcon(
+                  notification.type
+                )}
               </Text>
 
               <View style={styles.content}>
-                <Text style={styles.cardTitle}>
-                  {notification.title}
-                </Text>
+
+                <View style={styles.cardHeader}>
+
+                  <Text
+                    style={styles.cardTitle}
+                  >
+                    {notification.title}
+                  </Text>
+
+                  {!notification.isRead && (
+                    <View
+                      style={
+                        styles.unreadDot
+                      }
+                    />
+                  )}
+
+                </View>
 
                 <Text style={styles.message}>
                   {notification.message}
                 </Text>
 
                 <Text style={styles.date}>
-                  {formatDate(notification.createdAt)}
+                  {formatDate(
+                    notification.createdAt
+                  )}
                 </Text>
+
               </View>
+
             </View>
+
           </TouchableOpacity>
+
         ))
       )}
+
+      <View style={{ height: 40 }} />
+
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
     backgroundColor: "#F7F7F7",
@@ -292,12 +519,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // ==========================
+  // HEADER
+  // ==========================
+
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+
   title: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#222",
-    marginBottom: 20,
+    flex: 1,
   },
+
+  clearButton: {
+    backgroundColor: "#D32F2F",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+
+  clearButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+
+  limitText: {
+    fontSize: 13,
+    color: "#888",
+    marginBottom: 16,
+  },
+
+  // ==========================
+  // EMPTY STATE
+  // ==========================
 
   emptyContainer: {
     marginTop: 80,
@@ -322,6 +584,10 @@ const styles = StyleSheet.create({
     color: "#777",
     textAlign: "center",
   },
+
+  // ==========================
+  // NOTIFICATION CARD
+  // ==========================
 
   card: {
     flexDirection: "row",
@@ -355,11 +621,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 5,
+  },
+
   cardTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#222",
-    marginBottom: 5,
+    flex: 1,
+  },
+
+  unreadDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#E91E63",
+    marginLeft: 8,
   },
 
   message: {
@@ -373,4 +654,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999",
   },
+
 });

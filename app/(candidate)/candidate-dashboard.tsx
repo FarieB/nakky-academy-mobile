@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import {
+  useFocusEffect,
+  useRouter,
+} from "expo-router";
+import {
+  useCallback,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -54,9 +60,11 @@ export default function CandidateDashboard() {
     }
   };
 
-  useEffect(() => {
-    fetchDashboard();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboard();
+    }, [])
+  );
 
   // ==========================
   // LOADING

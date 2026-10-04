@@ -860,16 +860,26 @@ export default function ProfileBuilder() {
             )}
           </TouchableOpacity>
 
+          <Text style={styles.fieldLabel}>
+            First Name
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="First Name"
+            placeholder="Enter your first name"
+            placeholderTextColor="#888888"
             value={firstName}
             onChangeText={setFirstName}
           />
 
+          <Text style={styles.fieldLabel}>
+            Surname
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="Surname"
+            placeholder="Enter your surname"
+            placeholderTextColor="#888888"
             value={surname}
             onChangeText={setSurname}
           />
@@ -922,16 +932,26 @@ export default function ProfileBuilder() {
             </TouchableOpacity>
           </View>
 
+          <Text style={styles.fieldLabel}>
+            Date of Birth
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="Date of Birth (DD/MM/YYYY)"
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor="#888888"
             value={dateOfBirth}
             onChangeText={setDateOfBirth}
           />
 
+          <Text style={styles.fieldLabel}>
+            Nationality
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="Nationality"
+            placeholder="Enter your nationality"
+            placeholderTextColor="#888888"
             value={nationality}
             onChangeText={setNationality}
           />
@@ -976,6 +996,16 @@ export default function ProfileBuilder() {
             ))}
           </View>
 
+          <Text style={styles.fieldLabel}>
+            About the Candidate
+          </Text>
+
+          <Text style={styles.fieldHelp}>
+            Briefly describe yourself, your experience,
+            personality and the type of work you are
+            looking for.
+          </Text>
+
           <TextInput
             style={[
               styles.input,
@@ -986,6 +1016,7 @@ export default function ProfileBuilder() {
             ]}
             multiline
             placeholder="Tell employers about yourself..."
+            placeholderTextColor="#888888"
             value={bio}
             onChangeText={setBio}
           />
@@ -1002,12 +1033,17 @@ export default function ProfileBuilder() {
             Location
           </Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Street Address"
-            value={streetAddress}
-            onChangeText={setStreetAddress}
-          />
+         <Text style={styles.fieldLabel}>
+          Street Address
+        </Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your street address"
+          placeholderTextColor="#888888"
+          value={streetAddress}
+          onChangeText={setStreetAddress}
+        />
 
           <Text style={styles.label}>
             Province
@@ -1050,16 +1086,26 @@ export default function ProfileBuilder() {
             ))}
           </View>
 
+          <Text style={styles.fieldLabel}>
+            City / Town
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="City / Town"
+            placeholder="Enter your city or town"
+            placeholderTextColor="#888888"
             value={city}
             onChangeText={setCity}
           />
 
+          <Text style={styles.fieldLabel}>
+            Suburb
+          </Text>
+
           <TextInput
             style={styles.input}
-            placeholder="Suburb"
+            placeholder="Enter your suburb"
+            placeholderTextColor="#888888"
             value={suburb}
             onChangeText={setSuburb}
           />
@@ -1871,10 +1917,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: "#D0D0D0",
     paddingHorizontal: 15,
     paddingVertical: 15,
     fontSize: 16,
+    color: "#222222",
     marginBottom: 15,
   },
 
@@ -2009,6 +2056,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#333",
     marginBottom: 15,
+  },
+
+  fieldLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333333",
+    marginBottom: 7,
   },
 
   checkboxContainer: {
@@ -2155,5 +2209,12 @@ const styles = StyleSheet.create({
     color: "#555",
     fontSize: 15,
     lineHeight: 22,
+  },
+
+  fieldHelp: {
+    fontSize: 13,
+    color: "#777777",
+    lineHeight: 19,
+    marginBottom: 10,
   },
 });

@@ -1,40 +1,59 @@
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+
 import API from "../services/api";
 
 import {
-  startNotificationBadgeListener,
-  stopNotificationBadgeListener,
+    startNotificationBadgeListener,
+    stopNotificationBadgeListener,
 } from "../socket/notificationBadgeListener";
 
 export default function useNotificationBadge() {
+  const [badge, setBadge] = useState(0);
 
-    const [badge, setBadge] = useState(0);
+  // ==========================================
+  // LOAD CURRENT UNREAD COUNT
+  // ==========================================
 
-    useEffect(() => {
+  const loadBadge = useCallback(async () => {
+    try {
+      const res = await API.get(
+        "/notifications/unread-count"
+      );
 
-        loadBadge();
+      setBadge(
+        Number(res.data?.unread || 0)
+      );
 
-        startNotificationBadgeListener(setBadge);
+    } catch (error: any) {
+      console.log(
+        "NOTIFICATION BADGE ERROR:",
+        error?.response?.data || error.message
+      );
+    }
+  }, []);
 
-        return () => {
-            stopNotificationBadgeListener();
-        };
+  // ==========================================
+  // REFRESH WHEN SCREEN COMES INTO FOCUS
+  // ==========================================
 
-    }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadBadge();
+    }, [loadBadge])
+  );
 
-    const loadBadge = async () => {
+  // ==========================================
+  // REAL-TIME SOCKET NOTIFICATIONS
+  // ==========================================
 
-        try {
+  useEffect(() => {
+    startNotificationBadgeListener(setBadge);
 
-            const res = await API.get(
-                "/notifications/unread-count"
-            );
-
-            setBadge(res.data.unread);
-
-        } catch {}
-
+    return () => {
+      stopNotificationBadgeListener();
     };
+  }, []);
 
-    return badge;
+  return badge;
 }

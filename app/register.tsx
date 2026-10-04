@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import ImageCarousel from "../components/ImageCarousel";
 import API from "../src/services/api";
 
@@ -20,14 +21,53 @@ export default function RegisterScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
 
   const [role, setRole] = useState("candidate");
 
   const [loading, setLoading] = useState(false);
 
   const register = async () => {
-    if (!name || !email || !password) {
-      Alert.alert("Error", "Please fill all fields");
+
+    // ==============================
+    // REQUIRED FIELDS
+    // ==============================
+
+    if (
+      !name ||
+      !email ||
+      !password ||
+      !confirmPassword
+    ) {
+      Alert.alert(
+        "Error",
+        "Please fill all fields"
+      );
+      return;
+    }
+
+    // ==============================
+    // PASSWORD MATCH
+    // ==============================
+
+    if (password !== confirmPassword) {
+      Alert.alert(
+        "Password Mismatch",
+        "The passwords do not match. Please check both password fields."
+      );
+      return;
+    }
+
+    // ==============================
+    // PASSWORD LENGTH
+    // ==============================
+
+    if (password.length < 6) {
+      Alert.alert(
+        "Password Too Short",
+        "Your password must be at least 6 characters long."
+      );
       return;
     }
 
@@ -47,10 +87,13 @@ export default function RegisterScreen() {
       );
 
       router.replace("/login");
+
     } catch (err: any) {
+
       console.log(
         "REGISTER ERROR:",
-        err?.response?.data || err.message
+        err?.response?.data ||
+          err.message
       );
 
       Alert.alert(
@@ -58,6 +101,7 @@ export default function RegisterScreen() {
         err?.response?.data?.message ||
           "Something went wrong."
       );
+
     } finally {
       setLoading(false);
     }
@@ -66,116 +110,205 @@ export default function RegisterScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: 40 }}
+      contentContainerStyle={
+        styles.scrollContent
+      }
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
+
+      {/* LOGO */}
+
       <Image
-        source={require("../assets/images/logo.png")}
+        source={require(
+          "../assets/images/logo.png"
+        )}
         style={styles.logo}
         resizeMode="contain"
       />
 
-      <Text style={styles.title}>Create Account</Text>
+      <Text style={styles.title}>
+        Create Account
+      </Text>
 
       <Text style={styles.subtitle}>
-        Join thousands of caregivers, employers and students building better careers.
+        Join thousands of caregivers,
+        employers and students building
+        better careers.
       </Text>
 
       <View style={styles.carouselSpacer}>
-          <ImageCarousel />
-      </View> 
+        <ImageCarousel />
+      </View>
+
+      {/* FULL NAME */}
 
       <TextInput
         placeholder="Full Name"
-        placeholderTextColor="#999"
+        placeholderTextColor="#777777"
         value={name}
         onChangeText={setName}
+        autoCapitalize="words"
+        autoCorrect={false}
         style={styles.input}
       />
 
+      {/* EMAIL */}
+
       <TextInput
         placeholder="Email Address"
-        placeholderTextColor="#999"
+        placeholderTextColor="#777777"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
         style={styles.input}
       />
 
+      {/* PASSWORD */}
+
       <TextInput
         placeholder="Password"
-        placeholderTextColor="#999"
+        placeholderTextColor="#777777"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={true}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="newPassword"
         style={styles.input}
       />
+
+      {/* CONFIRM PASSWORD */}
+
+      <TextInput
+        placeholder="Confirm Password"
+        placeholderTextColor="#777777"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry={true}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="newPassword"
+        style={[
+          styles.input,
+          password &&
+            confirmPassword &&
+            password !== confirmPassword &&
+            styles.passwordMismatch,
+        ]}
+      />
+
+      {/* PASSWORD MATCH MESSAGE */}
+
+      {password &&
+        confirmPassword &&
+        password !== confirmPassword && (
+          <Text style={styles.passwordError}>
+            Passwords do not match.
+          </Text>
+        )}
+
+      {password &&
+        confirmPassword &&
+        password === confirmPassword && (
+          <Text style={styles.passwordSuccess}>
+            ✓ Passwords match.
+          </Text>
+        )}
+
+      {/* ROLE */}
 
       <Text style={styles.roleTitle}>
         I want to join as:
       </Text>
 
       <View style={styles.roleContainer}>
+
+        {/* CANDIDATE */}
+
         <TouchableOpacity
           style={[
             styles.roleButton,
-            role === "candidate" && styles.selectedRole,
+            role === "candidate" &&
+              styles.selectedRole,
           ]}
-          onPress={() => setRole("candidate")}
+          onPress={() =>
+            setRole("candidate")
+          }
         >
           <Text
             style={[
               styles.roleText,
-              role === "candidate" && styles.selectedRoleText,
+              role === "candidate" &&
+                styles.selectedRoleText,
             ]}
           >
             👩‍⚕️ Candidate
           </Text>
         </TouchableOpacity>
 
+        {/* EMPLOYER */}
+
         <TouchableOpacity
           style={[
             styles.roleButton,
-            role === "employer" && styles.selectedRole,
+            role === "employer" &&
+              styles.selectedRole,
           ]}
-          onPress={() => setRole("employer")}
+          onPress={() =>
+            setRole("employer")
+          }
         >
           <Text
             style={[
               styles.roleText,
-              role === "employer" && styles.selectedRoleText,
+              role === "employer" &&
+                styles.selectedRoleText,
             ]}
           >
             🏠 Employer
           </Text>
         </TouchableOpacity>
 
+        {/* STUDENT */}
+
         <TouchableOpacity
           style={[
             styles.roleButton,
-            role === "student" && styles.selectedRole,
+            role === "student" &&
+              styles.selectedRole,
           ]}
-          onPress={() => setRole("student")}
+          onPress={() =>
+            setRole("student")
+          }
         >
           <Text
             style={[
               styles.roleText,
-              role === "student" && styles.selectedRoleText,
+              role === "student" &&
+                styles.selectedRoleText,
             ]}
           >
             🎓 Student
           </Text>
         </TouchableOpacity>
+
       </View>
 
+      {/* REGISTER */}
+
       {loading ? (
+
         <ActivityIndicator
           size="large"
           color="#E91E63"
-          style={{ marginTop: 25 }}
+          style={styles.loader}
         />
+
       ) : (
+
         <>
           <TouchableOpacity
             style={styles.registerButton}
@@ -188,23 +321,32 @@ export default function RegisterScreen() {
 
           <TouchableOpacity
             style={styles.loginButton}
-            onPress={() => router.replace("/login")}
+            onPress={() =>
+              router.replace("/login")
+            }
           >
             <Text style={styles.loginText}>
               Already have an account? Login
             </Text>
           </TouchableOpacity>
         </>
+
       )}
+
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 24,
+  },
+
+  scrollContent: {
+    paddingBottom: 40,
   },
 
   logo: {
@@ -223,7 +365,7 @@ const styles = StyleSheet.create({
 
   subtitle: {
     textAlign: "center",
-    color: "#666",
+    color: "#666666",
     fontSize: 16,
     marginTop: 10,
     marginBottom: 25,
@@ -232,7 +374,7 @@ const styles = StyleSheet.create({
 
   carouselSpacer: {
     marginBottom: 25,
-  }, 
+  },
 
   input: {
     backgroundColor: "#F7F7F7",
@@ -240,15 +382,38 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     marginBottom: 15,
+
+    // IMPORTANT:
+    // Makes typed text clearly visible
+    color: "#222222",
+
     borderWidth: 1,
     borderColor: "#E5E5E5",
+  },
+
+  passwordMismatch: {
+    borderColor: "#D32F2F",
+  },
+
+  passwordError: {
+    color: "#D32F2F",
+    fontSize: 13,
+    marginTop: -8,
+    marginBottom: 12,
+  },
+
+  passwordSuccess: {
+    color: "#2E7D32",
+    fontSize: 13,
+    marginTop: -8,
+    marginBottom: 12,
   },
 
   roleTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
-    color: "#333",
+    color: "#333333",
   },
 
   roleContainer: {
@@ -259,7 +424,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: "#DDDDDD",
     marginBottom: 12,
   },
 
@@ -271,12 +436,16 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: "#333333",
     textAlign: "center",
   },
 
   selectedRoleText: {
-    color: "#fff",
+    color: "#FFFFFF",
+  },
+
+  loader: {
+    marginTop: 25,
   },
 
   registerButton: {
@@ -287,7 +456,7 @@ const styles = StyleSheet.create({
   },
 
   registerText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
@@ -304,4 +473,5 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
+
 });

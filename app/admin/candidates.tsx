@@ -14,6 +14,10 @@ import {
   View,
 } from "react-native";
 
+import Pdf from "react-native-pdf";
+
+import { File, Paths } from "expo-file-system";
+
 import useAdminGuard from "../../src/hooks/useAdminGuard";
 import API from "../../src/services/api";
 
@@ -114,6 +118,15 @@ export default function CandidatesScreen() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  const [documentViewerVisible, setDocumentViewerVisible] =
+    useState(false);
+
+  const [documentViewerUri, setDocumentViewerUri] =
+    useState<string | null>(null);
+
+  const [documentViewerMime, setDocumentViewerMime] =
+    useState("application/pdf");
+
 
 // =====================================================
 // LOAD CANDIDATES
@@ -195,6 +208,151 @@ export default function CandidatesScreen() {
       );
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+
+// =====================================================
+// OPEN CANDIDATE DOCUMENT
+// =====================================================
+
+  const viewCandidateDocument = async (
+    candidate: Candidate,
+    type: string,
+    index?: number
+  ) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert("Error", "Authentication token not found.");
+        return;
+      }
+
+      let url =
+        `${API.defaults.baseURL}/profiles/candidate/` +
+        `${candidate._id}/document/${type}`;
+
+      if (index !== undefined) {
+        url += `/${index}`;
+      }
+
+      // ==========================================
+      // GET STORED FILE NAME
+      // ==========================================
+
+      let storedFileName = "";
+
+      if (type === "idDocument") {
+        storedFileName =
+          candidate.documents?.idDocument || "";
+      }
+
+      if (type === "policeClearance") {
+        storedFileName =
+          candidate.documents?.policeClearance || "";
+      }
+
+      if (type === "cv") {
+        storedFileName =
+          candidate.documents?.cv || "";
+      }
+
+      if (
+        type === "qualification" &&
+        index !== undefined
+      ) {
+        storedFileName =
+          candidate.qualifications?.[index]
+            ?.certificateFile || "";
+      }
+
+      if (
+        type === "reference" &&
+        index !== undefined
+      ) {
+        storedFileName =
+          candidate.references?.[index]?.file || "";
+      }
+
+      // ==========================================
+      // DETERMINE FILE TYPE
+      // ==========================================
+
+      const extension =
+        storedFileName
+          ?.split(".")
+          .pop()
+          ?.toLowerCase() || "pdf";
+
+      const mimeMap: Record<string, string> = {
+        pdf: "application/pdf",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        webp: "image/webp",
+        txt: "text/plain",
+        doc: "application/msword",
+        docx:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        xls: "application/vnd.ms-excel",
+        xlsx:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      };
+
+      const mimeType =
+        mimeMap[extension] || "application/pdf";
+
+      // ==========================================
+      // DOWNLOAD TO APP CACHE
+      // ==========================================
+
+      const fileName =
+        `candidate-${candidate._id}-${type}-${Date.now()}.${extension}`;
+
+      const localFile = new File(
+        Paths.cache,
+        fileName
+      );
+
+      const download =
+        await File.downloadFileAsync(
+          url,
+          localFile,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+      // ==========================================
+      // OPEN INSIDE APP
+      // ==========================================
+
+      setDocumentViewerUri(download.uri);
+      setDocumentViewerMime(mimeType);
+      setDocumentViewerVisible(true);
+
+    } catch (error: any) {
+      console.error(
+        "ADMIN VIEW CANDIDATE DOCUMENT ERROR:",
+        error
+      );
+
+      if (error?.response?.status === 403) {
+        Alert.alert(
+          "Access Denied",
+          "You are not authorized to view this candidate document."
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Document Error",
+        "The document could not be opened."
+      );
     }
   };
 
@@ -962,12 +1120,31 @@ export default function CandidatesScreen() {
                         </Text>
 
                         {qualification.certificateFile ? (
-                          <Text
-                            style={styles.fileText}
-                          >
-                            Certificate uploaded
+                          <>
+                            <Text style={styles.fileText}>
+                              Certificate uploaded
+                            </Text>
+
+                            <TouchableOpacity
+                              style={styles.documentButton}
+                              onPress={() =>
+                                viewCandidateDocument(
+                                  selectedCandidate,
+                                  "qualification",
+                                  index
+                                )
+                              }
+                            >
+                              <Text style={styles.documentButtonText}>
+                                📄 View Qualification Certificate
+                              </Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <Text style={styles.noData}>
+                            No certificate uploaded.
                           </Text>
-                        ) : null}
+                        )}
                       </View>
                     )
                   )
@@ -982,34 +1159,67 @@ export default function CandidatesScreen() {
               {/* DOCUMENTS */}
 
               <Section title="Documents">
-                <InfoRow
-                  label="ID document"
-                  value={
-                    selectedCandidate.documents
-                      ?.idDocument
-                      ? "Uploaded"
-                      : "Not uploaded"
-                  }
-                />
 
-                <InfoRow
-                  label="Police clearance"
-                  value={
-                    selectedCandidate.documents
-                      ?.policeClearance
-                      ? "Uploaded"
-                      : "Not uploaded"
-                  }
-                />
+                {selectedCandidate.documents?.idDocument ? (
+                  <TouchableOpacity
+                    style={styles.documentButton}
+                    onPress={() =>
+                      viewCandidateDocument(
+                        selectedCandidate,
+                        "idDocument"
+                      )
+                    }
+                  >
+                    <Text style={styles.documentButtonText}>
+                      🪪 View ID / Passport
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.documentUnavailable}>
+                    ID / Passport not uploaded
+                  </Text>
+                )}
 
-                <InfoRow
-                  label="CV"
-                  value={
-                    selectedCandidate.documents?.cv
-                      ? "Uploaded"
-                      : "Not uploaded"
-                  }
-                />
+                {selectedCandidate.documents?.cv ? (
+                  <TouchableOpacity
+                    style={styles.documentButton}
+                    onPress={() =>
+                      viewCandidateDocument(
+                        selectedCandidate,
+                        "cv"
+                      )
+                    }
+                  >
+                    <Text style={styles.documentButtonText}>
+                      📄 View CV
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.documentUnavailable}>
+                    CV not uploaded
+                  </Text>
+                )}
+
+                {selectedCandidate.documents?.policeClearance ? (
+                  <TouchableOpacity
+                    style={styles.documentButton}
+                    onPress={() =>
+                      viewCandidateDocument(
+                        selectedCandidate,
+                        "policeClearance"
+                      )
+                    }
+                  >
+                    <Text style={styles.documentButtonText}>
+                      🛡️ View Police Clearance
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.documentUnavailable}>
+                    Police clearance not uploaded
+                  </Text>
+                )}
+
               </Section>
 
 
@@ -1030,13 +1240,28 @@ export default function CandidatesScreen() {
                           Reference {index + 1}
                         </Text>
 
-                        <Text
-                          style={styles.documentText}
-                        >
+                        <Text style={styles.documentText}>
                           {reference.file
                             ? "Reference document uploaded"
                             : "No document uploaded"}
                         </Text>
+
+                        {reference.file ? (
+                          <TouchableOpacity
+                            style={styles.documentButton}
+                            onPress={() =>
+                              viewCandidateDocument(
+                                selectedCandidate,
+                                "reference",
+                                index
+                              )
+                            }
+                          >
+                            <Text style={styles.documentButtonText}>
+                              📄 View Reference
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     )
                   )
@@ -1121,6 +1346,74 @@ export default function CandidatesScreen() {
               </View>
             </ScrollView>
           ) : null}
+        </View>
+      </Modal>
+
+
+      {/* =================================================
+          DOCUMENT VIEWER MODAL
+      ================================================= */}
+
+      <Modal
+        visible={documentViewerVisible}
+        animationType="slide"
+        onRequestClose={() => {
+          setDocumentViewerVisible(false);
+          setDocumentViewerUri(null);
+        }}
+      >
+        <View style={styles.documentViewerContainer}>
+
+          <View style={styles.documentViewerHeader}>
+
+            <Text style={styles.documentViewerTitle}>
+              Candidate Document
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => {
+                setDocumentViewerVisible(false);
+                setDocumentViewerUri(null);
+              }}
+              style={styles.documentViewerCloseButton}
+            >
+              <Text style={styles.documentViewerCloseText}>
+                Close
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+          {documentViewerUri &&
+          documentViewerMime === "application/pdf" ? (
+            <Pdf
+              source={{
+                uri: documentViewerUri,
+              }}
+              style={styles.pdfViewer}
+              trustAllCerts={false}
+              onError={(error) => {
+                console.error(
+                  "ADMIN PDF VIEWER ERROR:",
+                  error
+                );
+
+                Alert.alert(
+                  "Document Error",
+                  "The PDF could not be displayed."
+                );
+              }}
+            />
+          ) : documentViewerUri ? (
+            <Image
+              source={{
+                uri: documentViewerUri,
+              }}
+              style={styles.imageViewer}
+              resizeMode="contain"
+            />
+          ) : null}
+
         </View>
       </Modal>
     </View>
@@ -1575,5 +1868,72 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
+  },
+
+  documentButton: {
+    backgroundColor: "#2f6fed",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 9,
+    marginTop: 9,
+    alignItems: "center",
+  },
+
+  documentButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  documentUnavailable: {
+    color: "#888888",
+    fontSize: 13,
+    marginTop: 7,
+    marginBottom: 5,
+  },
+
+  documentViewerContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+
+  documentViewerHeader: {
+    minHeight: 60,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#dddddd",
+  },
+
+  documentViewerTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#222222",
+  },
+
+  documentViewerCloseButton: {
+    backgroundColor: "#e53935",
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+
+  documentViewerCloseText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  pdfViewer: {
+    flex: 1,
+    width: "100%",
+  },
+
+  imageViewer: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
   },
 });
