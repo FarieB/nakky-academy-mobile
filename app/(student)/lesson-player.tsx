@@ -18,7 +18,7 @@ import { File, Paths } from "expo-file-system";
 import { VideoView, useVideoPlayer } from "expo-video";
 import Pdf from "react-native-pdf";
 
-const API_URL = "http://192.168.110.120:5000/api";
+const API_URL = "https://api.nakkyacademy.co.za/api";
 
 type Material = {
   _id?: string;

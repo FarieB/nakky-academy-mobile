@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { io, Socket } from "socket.io-client";
 
 // Your verified local network IP address and backend port
-const BACKEND_URL = "http://192.168.0.124:5000"; 
+const BACKEND_URL = "https://api.nakkyacademy.co.za"; 
 
 let socket: Socket | null = null;
 

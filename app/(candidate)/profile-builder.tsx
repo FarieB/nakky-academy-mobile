@@ -509,275 +509,268 @@ export default function ProfileBuilder() {
     }
   };
 
-  // =====================================
-  // SAVE PROFILE
-  // =====================================
+// =====================================
+// SAVE PROFILE
+// =====================================
 
-  const saveProfile = async () => {
+const saveProfile = async () => {
+  console.log(
+    "========== SAVE PROFILE =========="
+  );
+
+  try {
+    setSaving(true);
+
+    const token =
+      await AsyncStorage.getItem("token");
+
+    if (!token) {
+      Alert.alert(
+        "Session Error",
+        "Your login session has expired. Please log in again."
+      );
+      return;
+    }
+
+    API.defaults.headers.common.Authorization =
+      `Bearer ${token}`;
+
+    // =====================================
+    // 1. KEEP EXISTING SERVER DOCUMENTS
+    // =====================================
+
+    const finalIdDocument =
+      !isLocalFile(idDocument)
+        ? idDocument
+        : "";
+
+    const finalCv =
+      !isLocalFile(cv)
+        ? cv
+        : "";
+
+    const finalPoliceClearance =
+      !isLocalFile(policeClearance)
+        ? policeClearance
+        : "";
+
+    // =====================================
+    // 2. KEEP EXISTING QUALIFICATIONS
+    // =====================================
+
+    const existingQualifications =
+      qualifications
+        .filter(
+          (item): item is QualificationItem =>
+            typeof item === "object"
+        )
+        .map((item) => ({
+          title:
+            item.title || "Qualification",
+          institution:
+            item.institution || "",
+          yearCompleted:
+            item.yearCompleted ||
+            new Date().getFullYear(),
+          certificateFile:
+            item.certificateFile || "",
+        }));
+
+    // =====================================
+    // 3. KEEP EXISTING REFERENCES
+    // =====================================
+
+    const existingReferences =
+      references
+        .filter(
+          (item): item is ReferenceItem =>
+            typeof item === "object"
+        )
+        .map((item) => ({
+          file: item.file || "",
+        }))
+        .filter((item) => item.file);
+
+    // =====================================
+    // 4. BUILD PROFILE PAYLOAD
+    // =====================================
+
+    const payload = {
+      firstName,
+      surname,
+      gender,
+
+      dateOfBirth:
+        dateOfBirth &&
+        dateOfBirth.includes("/")
+          ? new Date(
+              dateOfBirth
+                .split("/")
+                .reverse()
+                .join("-")
+            )
+          : undefined,
+
+      nationality,
+      bio,
+
+      province,
+      city,
+      suburb,
+      streetAddress,
+
+      workerTypes,
+      languages,
+      skills,
+
+      yearsExperience:
+        Number(yearsExperience) || 0,
+
+      expectedSalary:
+        Number(expectedSalary) || 0,
+
+      availabilityStatus,
+      workPreferences,
+
+      shifts: {
+        day: dayShift,
+        night: nightShift,
+      },
+
+      profilePhoto,
+
+      qualifications:
+        existingQualifications,
+
+      references:
+        existingReferences,
+
+      documents: {
+        idDocument:
+          finalIdDocument,
+
+        policeClearance:
+          finalPoliceClearance,
+
+        cv:
+          finalCv,
+      },
+    };
+
     console.log(
-      "========== SAVE PROFILE =========="
+      "Profile payload:",
+      payload
     );
 
-    try {
-      setSaving(true);
+    // =====================================
+    // 5. CREATE OR UPDATE PROFILE FIRST
+    // =====================================
 
-      const token =
-        await AsyncStorage.getItem("token");
+    let profileResponse;
 
-      if (!token) {
-        Alert.alert(
-          "Session Error",
-          "Your login session has expired. Please log in again."
-        );
-        return;
-      }
-
-      API.defaults.headers.common.Authorization =
-        `Bearer ${token}`;
-
-      // -------------------------------------
-      // 1. UPLOAD NEW DOCUMENT FILES
-      // -------------------------------------
-
-      const uploadedDocuments =
-        await uploadCandidateDocuments(token);
-
+    if (profileExists) {
       console.log(
-        "Uploaded document response:",
-        uploadedDocuments
+        "Updating existing candidate profile..."
       );
 
-      // -------------------------------------
-      // 2. KEEP EXISTING SERVER DOCUMENTS
-      // -------------------------------------
-
-      const finalIdDocument =
-        uploadedDocuments?.documents?.idDocument ||
-        (!isLocalFile(idDocument)
-          ? idDocument
-          : "");
-
-      const finalCv =
-        uploadedDocuments?.documents?.cv ||
-        (!isLocalFile(cv) ? cv : "");
-
-      const finalPoliceClearance =
-        uploadedDocuments?.documents
-          ?.policeClearance ||
-        (!isLocalFile(policeClearance)
-          ? policeClearance
-          : "");
-
-      // -------------------------------------
-      // 3. KEEP EXISTING QUALIFICATIONS
-      // -------------------------------------
-
-      const existingQualifications =
-        qualifications
-          .filter(
-            (item): item is QualificationItem =>
-              typeof item === "object"
-          )
-          .map((item) => ({
-            title:
-              item.title || "Qualification",
-            institution:
-              item.institution || "",
-            yearCompleted:
-              item.yearCompleted ||
-              new Date().getFullYear(),
-            certificateFile:
-              item.certificateFile || "",
-          }));
-
-      const uploadedQualifications =
-        uploadedDocuments?.qualifications || [];
-
-      const finalQualifications = [
-        ...existingQualifications,
-        ...uploadedQualifications
-          .filter(
-            (item: any) =>
-              item?.certificateFile
-          )
-          .map((item: any) => ({
-            title:
-              item.title || "Qualification",
-            institution:
-              item.institution || "",
-            yearCompleted:
-              item.yearCompleted ||
-              new Date().getFullYear(),
-            certificateFile:
-              item.certificateFile,
-          })),
-      ];
-
-      // -------------------------------------
-      // 4. KEEP EXISTING REFERENCES
-      // -------------------------------------
-
-      const existingReferences =
-        references
-          .filter(
-            (item): item is ReferenceItem =>
-              typeof item === "object"
-          )
-          .map((item) => ({
-            file: item.file || "",
-          }))
-          .filter((item) => item.file);
-
-      const uploadedReferences =
-        uploadedDocuments?.references || [];
-
-      const finalReferences = [
-        ...existingReferences,
-        ...uploadedReferences
-          .filter(
-            (item: any) =>
-              item?.file
-          )
-          .map((item: any) => ({
-            file: item.file,
-          })),
-      ];
-
-      // -------------------------------------
-      // 5. BUILD PROFILE PAYLOAD
-      // -------------------------------------
-
-      const payload = {
-        firstName,
-        surname,
-        gender,
-
-        dateOfBirth:
-          dateOfBirth &&
-          dateOfBirth.includes("/")
-            ? new Date(
-                dateOfBirth
-                  .split("/")
-                  .reverse()
-                  .join("-")
-              )
-            : undefined,
-
-        nationality,
-        bio,
-
-        province,
-        city,
-        suburb,
-        streetAddress,
-
-        workerTypes,
-        languages,
-        skills,
-
-        yearsExperience:
-          Number(yearsExperience) || 0,
-
-        expectedSalary:
-          Number(expectedSalary) || 0,
-
-        availabilityStatus,
-        workPreferences,
-
-        shifts: {
-          day: dayShift,
-          night: nightShift,
-        },
-
-        profilePhoto,
-
-        qualifications:
-          finalQualifications,
-
-        references:
-          finalReferences,
-
-        documents: {
-          idDocument:
-            finalIdDocument,
-
-          policeClearance:
-            finalPoliceClearance,
-
-          cv:
-            finalCv,
-        },
-      };
-
-      console.log(
-        "Profile payload:",
+      profileResponse = await API.put(
+        "/profiles/candidate",
         payload
       );
-
-      // -------------------------------------
-      // 6. SAVE PROFILE
-      // -------------------------------------
-
-      if (profileExists) {
-        await API.put(
-          "/profiles/candidate",
-          payload
-        );
-      } else {
-        await API.post(
-          "/profiles/candidate",
-          payload
-        );
-      }
-
-      console.log("PROFILE SAVE SUCCESS");
-
-      Alert.alert(
-        "Success",
-        profileExists
-          ? "Profile and documents updated successfully."
-          : "Profile and documents uploaded successfully."
-      );
-
-      router.replace(
-        "/(candidate)/candidate-dashboard"
-      );
-    } catch (err: any) {
+    } else {
       console.log(
-        "========== PROFILE ERROR =========="
+        "Creating new candidate profile..."
       );
 
-      console.log(
-        "Status:",
-        err.response?.status
+      profileResponse = await API.post(
+        "/profiles/candidate",
+        payload
       );
-
-      console.log(
-        "Response:",
-        err.response?.data
-      );
-
-      console.log(
-        "Message:",
-        err.message
-      );
-
-      console.log(
-        "Full Error:",
-        err
-      );
-
-      Alert.alert(
-        "Profile Error",
-        err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message ||
-          "Unable to save your profile."
-      );
-    } finally {
-      setSaving(false);
     }
-  };
+
+    console.log(
+      "PROFILE CREATED/UPDATED SUCCESSFULLY:",
+      profileResponse.data
+    );
+
+    // =====================================
+    // 6. NOW UPLOAD NEW DOCUMENT FILES
+    // =====================================
+
+    console.log(
+      "Starting candidate document upload..."
+    );
+
+    const uploadedDocuments =
+      await uploadCandidateDocuments(token);
+
+    console.log(
+      "Uploaded document response:",
+      uploadedDocuments
+    );
+
+    // =====================================
+    // 7. SUCCESS
+    // =====================================
+
+    console.log(
+      "========== PROFILE SAVE SUCCESS =========="
+    );
+
+    Alert.alert(
+      "Success",
+      profileExists
+        ? "Profile and documents updated successfully."
+        : "Profile and documents uploaded successfully.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            router.replace(
+              "/(candidate)/candidate-dashboard"
+            );
+          },
+        },
+      ]
+    );
+
+  } catch (err: any) {
+    console.log(
+      "========== PROFILE ERROR =========="
+    );
+
+    console.log(
+      "Status:",
+      err.response?.status
+    );
+
+    console.log(
+      "Response:",
+      err.response?.data
+    );
+
+    console.log(
+      "Message:",
+      err.message
+    );
+
+    console.log(
+      "Full Error:",
+      err
+    );
+
+    Alert.alert(
+      "Profile Error",
+      err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Unable to save your profile."
+    );
+
+  } finally {
+    setSaving(false);
+  }
+};
 
   // =====================================
   // LOADING STATE

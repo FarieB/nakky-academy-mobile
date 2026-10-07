@@ -553,7 +553,7 @@ export default function CandidatesScreen() {
 
               const endpoint = active
                 ? `/profiles/admin/candidate/${candidate._id}/deactivate`
-                : `/profile/admin/candidate/${candidate._id}/activate`;
+                : `/profiles/admin/candidate/${candidate._id}/activate`;
 
               await API.put(
                 endpoint,

@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +45,13 @@ export default function EmployerProfile() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // ==========================================
+  // PROFILE STATUS
+  // ==========================================
+
+  const [profileExists, setProfileExists] = useState(false);
 
   // ==========================================
   // EMPLOYER DETAILS
@@ -93,13 +100,219 @@ export default function EmployerProfile() {
     useState("");
 
   // ==========================================
+  // LOAD EXISTING EMPLOYER PROFILE
+  // ==========================================
+
+  useEffect(() => {
+    loadEmployerProfile();
+  }, []);
+
+  const loadEmployerProfile = async () => {
+    try {
+      setLoadingProfile(true);
+
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert(
+          "Session Expired",
+          "Please log in again."
+        );
+        return;
+      }
+
+      API.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${token}`;
+
+      console.log(
+        "LOADING EMPLOYER PROFILE..."
+      );
+
+      const response = await API.get(
+        "/profiles/employer"
+      );
+
+      const profile = response.data;
+
+      console.log(
+        "EMPLOYER PROFILE LOADED:",
+        profile
+      );
+
+      if (!profile) {
+        setProfileExists(false);
+        return;
+      }
+
+      // ==========================================
+      // PROFILE EXISTS
+      // ==========================================
+
+      setProfileExists(true);
+
+      // ==========================================
+      // EMPLOYER DETAILS
+      // ==========================================
+
+      setContactPerson(
+        profile.contactPerson || ""
+      );
+
+      setEmployerType(
+        profile.employerType ||
+          "Private Household"
+      );
+
+      setHouseholdName(
+        profile.householdName || ""
+      );
+
+      // ==========================================
+      // LOCATION
+      // ==========================================
+
+      setProvince(
+        profile.province || ""
+      );
+
+      setCity(
+        profile.city || ""
+      );
+
+      setSuburb(
+        profile.suburb || ""
+      );
+
+      // ==========================================
+      // LOOKING FOR
+      // ==========================================
+
+      setLookingFor(
+        Array.isArray(profile.lookingFor)
+          ? profile.lookingFor
+          : []
+      );
+
+      // ==========================================
+      // EMPLOYMENT TYPES
+      // ==========================================
+
+      setEmploymentTypes(
+        Array.isArray(profile.employmentTypes)
+          ? profile.employmentTypes
+          : []
+      );
+
+      // ==========================================
+      // PREFERRED GENDER
+      // ==========================================
+
+      setPreferredGender(
+        profile.preferredGender || "Any"
+      );
+
+      // ==========================================
+      // AGE
+      // ==========================================
+
+      setPreferredAgeMin(
+        String(
+          profile.preferredAgeMin ?? 18
+        )
+      );
+
+      setPreferredAgeMax(
+        String(
+          profile.preferredAgeMax ?? 65
+        )
+      );
+
+      // ==========================================
+      // EXPERIENCE
+      // ==========================================
+
+      setPreferredExperience(
+        String(
+          profile.preferredExperience ?? 0
+        )
+      );
+
+      // ==========================================
+      // NATIONALITIES
+      // ==========================================
+
+      setPreferredNationalities(
+        Array.isArray(
+          profile.preferredNationalities
+        )
+          ? profile.preferredNationalities.join(
+              ", "
+            )
+          : ""
+      );
+
+      // ==========================================
+      // LANGUAGES
+      // ==========================================
+
+      setPreferredLanguages(
+        Array.isArray(
+          profile.preferredLanguages
+        )
+          ? profile.preferredLanguages.join(
+              ", "
+            )
+          : ""
+      );
+
+      // ==========================================
+      // SALARY
+      // ==========================================
+
+      setSalaryOffered(
+        String(
+          profile.salaryOffered ?? 0
+        )
+      );
+    } catch (err: any) {
+      console.log(
+        "EMPLOYER PROFILE LOAD ERROR:",
+        err?.response?.data ||
+          err.message
+      );
+
+      // A 404 means this employer does not
+      // currently have a profile.
+      if (
+        err?.response?.status === 404
+      ) {
+        setProfileExists(false);
+      } else {
+        Alert.alert(
+          "Profile Error",
+          err?.response?.data?.message ||
+            "Unable to load your employer profile."
+        );
+      }
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  // ==========================================
   // TOGGLE WORKER TYPE
   // ==========================================
 
-  const toggleWorkerType = (type: string) => {
+  const toggleWorkerType = (
+    type: string
+  ) => {
     setLookingFor((current) =>
       current.includes(type)
-        ? current.filter((item) => item !== type)
+        ? current.filter(
+            (item) => item !== type
+          )
         : [...current, type]
     );
   };
@@ -108,19 +321,27 @@ export default function EmployerProfile() {
   // TOGGLE EMPLOYMENT TYPE
   // ==========================================
 
-  const toggleEmploymentType = (type: string) => {
+  const toggleEmploymentType = (
+    type: string
+  ) => {
     setEmploymentTypes((current) =>
       current.includes(type)
-        ? current.filter((item) => item !== type)
+        ? current.filter(
+            (item) => item !== type
+          )
         : [...current, type]
     );
   };
 
   // ==========================================
-  // CREATE PROFILE
+  // SAVE / UPDATE PROFILE
   // ==========================================
 
-  const createProfile = async () => {
+  const saveProfile = async () => {
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
     if (!contactPerson.trim()) {
       Alert.alert(
         "Required",
@@ -156,7 +377,8 @@ export default function EmployerProfile() {
     try {
       setLoading(true);
 
-      const token = await AsyncStorage.getItem("token");
+      const token =
+        await AsyncStorage.getItem("token");
 
       if (!token) {
         Alert.alert(
@@ -170,19 +392,27 @@ export default function EmployerProfile() {
         "Authorization"
       ] = `Bearer ${token}`;
 
+      // ==========================================
+      // BUILD PAYLOAD
+      // ==========================================
+
       const payload = {
-        contactPerson: contactPerson.trim(),
+        contactPerson:
+          contactPerson.trim(),
 
         employerType,
 
         householdName:
           householdName.trim(),
 
-        province: province.trim(),
+        province:
+          province.trim(),
 
-        city: city.trim(),
+        city:
+          city.trim(),
 
-        suburb: suburb.trim(),
+        suburb:
+          suburb.trim(),
 
         lookingFor,
 
@@ -202,32 +432,79 @@ export default function EmployerProfile() {
         preferredNationalities:
           preferredNationalities
             .split(",")
-            .map((item) => item.trim())
+            .map((item) =>
+              item.trim()
+            )
             .filter(Boolean),
 
         preferredLanguages:
           preferredLanguages
             .split(",")
-            .map((item) => item.trim())
+            .map((item) =>
+              item.trim()
+            )
             .filter(Boolean),
 
         salaryOffered:
           Number(salaryOffered) || 0,
       };
 
-      const response = await API.post(
-        "/profiles/employer",
+      console.log(
+        "EMPLOYER PROFILE PAYLOAD:",
         payload
       );
 
-      console.log(
-        "EMPLOYER PROFILE CREATED:",
-        response.data
-      );
+      // ==========================================
+      // UPDATE EXISTING PROFILE
+      // OR CREATE IF NONE EXISTS
+      // ==========================================
+
+      let response;
+
+      if (profileExists) {
+        console.log(
+          "UPDATING EXISTING EMPLOYER PROFILE..."
+        );
+
+        response = await API.put(
+          "/profiles/employer",
+          payload
+        );
+
+        console.log(
+          "EMPLOYER PROFILE UPDATED:",
+          response.data
+        );
+      } else {
+        console.log(
+          "CREATING NEW EMPLOYER PROFILE..."
+        );
+
+        response = await API.post(
+          "/profiles/employer",
+          payload
+        );
+
+        console.log(
+          "EMPLOYER PROFILE CREATED:",
+          response.data
+        );
+
+        // The profile now exists.
+        setProfileExists(true);
+      }
+
+      // ==========================================
+      // SUCCESS
+      // ==========================================
 
       Alert.alert(
-        "Profile Created",
-        "Your employer profile has been created successfully.",
+        profileExists
+          ? "Profile Updated"
+          : "Profile Created",
+        profileExists
+          ? "Your employer profile has been updated successfully."
+          : "Your employer profile has been created successfully.",
         [
           {
             text: "Continue",
@@ -240,20 +517,44 @@ export default function EmployerProfile() {
       );
     } catch (err: any) {
       console.log(
-        "CREATE EMPLOYER PROFILE ERROR:",
-        err?.response?.data || err.message
+        "SAVE EMPLOYER PROFILE ERROR:",
+        err?.response?.data ||
+          err.message
       );
 
       Alert.alert(
-        "Profile Creation Failed",
+        "Profile Error",
         err?.response?.data?.message ||
           err?.response?.data?.error ||
-          "Unable to create employer profile."
+          "Unable to save your employer profile."
       );
     } finally {
       setLoading(false);
     }
   };
+
+  // ==========================================
+  // LOADING PROFILE
+  // ==========================================
+
+  if (loadingProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator
+          size="large"
+          color="#2E7D32"
+        />
+
+        <Text style={styles.loadingText}>
+          Loading your employer profile...
+        </Text>
+      </View>
+    );
+  }
+
+  // ==========================================
+  // MAIN UI
+  // ==========================================
 
   return (
     <ScrollView
@@ -266,12 +567,15 @@ export default function EmployerProfile() {
       {/* ========================================== */}
 
       <Text style={styles.heading}>
-        Create Employer Profile
+        {profileExists
+          ? "Employer Profile"
+          : "Create Employer Profile"}
       </Text>
 
       <Text style={styles.subtitle}>
-        Tell us about yourself and the type of candidate
-        you are looking for.
+        {profileExists
+          ? "Update your information and candidate preferences."
+          : "Tell us about yourself and the type of candidate you are looking for."}
       </Text>
 
       {/* ========================================== */}
@@ -289,6 +593,7 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="Your full name"
+        placeholderTextColor="#888888"
         value={contactPerson}
         onChangeText={setContactPerson}
       />
@@ -335,6 +640,7 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="Optional"
+        placeholderTextColor="#888888"
         value={householdName}
         onChangeText={setHouseholdName}
       />
@@ -354,6 +660,7 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="e.g. Gauteng"
+        placeholderTextColor="#888888"
         value={province}
         onChangeText={setProvince}
       />
@@ -365,6 +672,7 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="e.g. Johannesburg"
+        placeholderTextColor="#888888"
         value={city}
         onChangeText={setCity}
       />
@@ -376,6 +684,7 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="Optional"
+        placeholderTextColor="#888888"
         value={suburb}
         onChangeText={setSuburb}
       />
@@ -526,7 +835,9 @@ export default function EmployerProfile() {
             style={styles.input}
             keyboardType="numeric"
             value={preferredAgeMin}
-            onChangeText={setPreferredAgeMin}
+            onChangeText={
+              setPreferredAgeMin
+            }
           />
         </View>
 
@@ -539,7 +850,9 @@ export default function EmployerProfile() {
             style={styles.input}
             keyboardType="numeric"
             value={preferredAgeMax}
-            onChangeText={setPreferredAgeMax}
+            onChangeText={
+              setPreferredAgeMax
+            }
           />
         </View>
       </View>
@@ -556,8 +869,11 @@ export default function EmployerProfile() {
         style={styles.input}
         keyboardType="numeric"
         placeholder="Years of experience"
+        placeholderTextColor="#888888"
         value={preferredExperience}
-        onChangeText={setPreferredExperience}
+        onChangeText={
+          setPreferredExperience
+        }
       />
 
       {/* ========================================== */}
@@ -575,8 +891,11 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="e.g. South African, Zimbabwean"
+        placeholderTextColor="#888888"
         value={preferredNationalities}
-        onChangeText={setPreferredNationalities}
+        onChangeText={
+          setPreferredNationalities
+        }
       />
 
       {/* ========================================== */}
@@ -594,8 +913,11 @@ export default function EmployerProfile() {
       <TextInput
         style={styles.input}
         placeholder="e.g. English, Zulu, Sotho"
+        placeholderTextColor="#888888"
         value={preferredLanguages}
-        onChangeText={setPreferredLanguages}
+        onChangeText={
+          setPreferredLanguages
+        }
       />
 
       {/* ========================================== */}
@@ -610,27 +932,35 @@ export default function EmployerProfile() {
         style={styles.input}
         keyboardType="numeric"
         placeholder="Monthly salary in Rands"
+        placeholderTextColor="#888888"
         value={salaryOffered}
         onChangeText={setSalaryOffered}
       />
 
       {/* ========================================== */}
-      {/* CREATE BUTTON */}
+      {/* SAVE / UPDATE BUTTON */}
       {/* ========================================== */}
 
       <TouchableOpacity
         style={[
           styles.createButton,
-          loading && styles.buttonDisabled,
+          loading &&
+            styles.buttonDisabled,
         ]}
-        onPress={createProfile}
+        onPress={saveProfile}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator
+            color="#FFFFFF"
+          />
         ) : (
-          <Text style={styles.createButtonText}>
-            Create Employer Profile
+          <Text
+            style={styles.createButtonText}
+          >
+            {profileExists
+              ? "Save / Update Profile"
+              : "Create Employer Profile"}
           </Text>
         )}
       </TouchableOpacity>
@@ -648,6 +978,19 @@ const styles = StyleSheet.create({
 
   content: {
     padding: 20,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F5F7FA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#666",
   },
 
   heading: {
@@ -693,6 +1036,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 14,
     fontSize: 16,
+    color: "#222222",
     marginBottom: 15,
   },
 

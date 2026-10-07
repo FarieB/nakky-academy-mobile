@@ -2,15 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 /**
@@ -26,11 +26,11 @@ import {
  * If testing on a physical phone, replace the fallback with
  * your computer's local network IP address, for example:
  *
- * http://192.168.1.100:5000/api
+ * 
  */
 const API_URL =
-    process.env.EXPO_PUBLIC_API_URL ||
-    "http://localhost:5000/api";
+     process.env.EXPO_PUBLIC_API_URL ||
+    "https://api.nakkyacademy.co.za/api"; 
 
 /**
  * ============================================================

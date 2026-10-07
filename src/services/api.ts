@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://192.168.110.120:5000/api",
+  baseURL: "https://api.nakkyacademy.co.za/api",
   timeout: 120000,
 });
 

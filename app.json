@@ -1,13 +1,12 @@
 {
   "expo": {
-    "name": "nakky-academy-mobile",
-    "slug": "nakky-academy-mobile",
+    "name": "Nakky Academy",
+    "slug": "nakky-academy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "nakkyacademymobile",
+    "scheme": "nakkyacademy",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -25,7 +24,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
-      "package": "com.anonymous.nakkyacademymobile"
+      "package": "za.co.nakkyacademy.app"
     },
     "web": {
       "output": "static",
