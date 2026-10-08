@@ -27,95 +27,112 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const login = async () => {
-    if (!email || !password) {
-      Alert.alert(
-        "Error",
-        "Please enter email and password"
-      );
-      return;
+const login = async () => {
+  if (!email || !password) {
+    Alert.alert(
+      "Error",
+      "Please enter email and password"
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    console.log("LOGIN: request started");
+    const startTime = Date.now();
+
+    // =====================================================
+    // 1. LOGIN
+    // =====================================================
+
+    const res = await API.post("/auth/login", {
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    console.log(
+      `LOGIN: API response received in ${Date.now() - startTime}ms`
+    );
+
+    const token = res.data.token;
+    const user = res.data.user;
+
+    if (!token || !user) {
+      throw new Error("Invalid login response from server.");
     }
 
-    try {
-      setLoading(true);
+    // =====================================================
+    // 2. SAVE TOKEN + USER
+    // =====================================================
 
-      // 1. Login
-      const res = await API.post("/auth/login", {
-        email,
-        password,
-      });
+    await AsyncStorage.multiSet([
+      ["token", token],
+      ["user", JSON.stringify(user)],
+    ]);
 
-      const token = res.data.token;
+    // =====================================================
+    // 3. ATTACH TOKEN TO FUTURE REQUESTS
+    // =====================================================
 
-      // 2. Save token
-      await AsyncStorage.setItem(
-        "token",
-        token
-      );
+    API.defaults.headers.common[
+      "Authorization"
+    ] = `Bearer ${token}`;
 
-      // Save logged-in user
-      await AsyncStorage.setItem(
-        "user",
-        JSON.stringify(res.data.user)
-      );
+   // =====================================================
+// 4. GET ROLE DIRECTLY FROM LOGIN RESPONSE
+// =====================================================
 
-      // 3. Attach token to future requests
-      API.defaults.headers.common[
-        "Authorization"
-      ] = `Bearer ${token}`;
+const role = user.role;
 
-      // 4. Get dashboard to detect role
-      const dashboardRes =
-        await API.get("/dashboard");
+console.log("USER ROLE:", role);
 
-      const role =
-        dashboardRes.data.role;
+console.log(
+  `LOGIN: total completed in ${Date.now() - startTime}ms`
+);
 
-      console.log("USER ROLE:", role);
+// =====================================================
+// 5. ROLE-BASED REDIRECT
+// =====================================================
 
-      Alert.alert(
-        "Success",
-        `Logged in as ${role}`
-      );
+if (role === "employer") {
+  router.replace("/employer-dashboard");
 
-      // 5. Role-based redirect
-      if (role === "employer") {
-        router.replace("/employer-dashboard");
+} else if (role === "candidate") {
+  router.replace("/candidate-dashboard");
 
-      } else if (role === "candidate") {
-        router.replace("/candidate-dashboard");
+} else if (role === "student") {
+  router.replace("/student/dashboard");
 
-      } else if (role === "student") {
-        router.replace("/student/dashboard");
+} else if (role === "admin") {
+  router.replace("/admin/dashboard");
 
-      } else if (role === "admin") {
-        router.replace("/admin/dashboard");
+} else {
+  Alert.alert(
+    "Error",
+    "Unknown user role."
+  );
+}
 
-      } else {
-        Alert.alert(
-          "Error",
-          "Unknown user role."
-        );
-      }
+  } catch (err: any) {
 
-    } catch (err: any) {
+    console.log(
+      "LOGIN ERROR:",
+      err?.response?.data ||
+        err?.message ||
+        err
+    );
 
-      console.log(
-        "LOGIN ERROR:",
-        err?.response?.data ||
-          err.message
-      );
+    Alert.alert(
+      "Login failed",
+      err?.response?.data?.message ||
+        "Invalid credentials"
+    );
 
-      Alert.alert(
-        "Login failed",
-        err?.response?.data?.message ||
-          "Invalid credentials"
-      );
-
-    } finally {
-      setLoading(false);
-    }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <KeyboardAvoidingView
