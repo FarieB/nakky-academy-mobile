@@ -1,628 +1,986 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  useFocusEffect,
-  useRouter,
-} from "expo-router";
-import {
-  useCallback,
-  useState,
-} from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
-import DashboardButton from "../../components/DashboardButton";
-import DashboardCard from "../../components/DashboardCard";
-import DashboardHeader from "../../components/DashboardHeader";
-import LogoutButton from "../../components/LogoutButton";
-import SectionTitle from "../../components/SectionTitle";
 import API from "../../src/services/api";
+
+type SubscriptionStatus = {
+  active?: boolean;
+  status?: string;
+  expiry?: string | null;
+  subscriptionStatus?: string;
+  subscriptionExpiry?: string | null;
+  profileVerified?: boolean;
+  verifiedBadge?: boolean;
+};
+
+type DashboardData = {
+  user?: {
+    _id?: string;
+    firstName?: string;
+    surname?: string;
+    name?: string;
+    role?: string;
+    accountStatus?: string;
+  };
+  candidate?: {
+    _id?: string;
+    firstName?: string;
+    surname?: string;
+    profileCompleted?: boolean;
+    profileVerified?: boolean;
+    verificationStatus?: string;
+    verifiedBadge?: boolean;
+  };
+  profile?: {
+    _id?: string;
+    firstName?: string;
+    surname?: string;
+    profileCompleted?: boolean;
+    profileVerified?: boolean;
+    verificationStatus?: string;
+    verifiedBadge?: boolean;
+  };
+  [key: string]: any;
+};
 
 export default function CandidateDashboard() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [subscription, setSubscription] =
+    useState<SubscriptionStatus | null>(null);
 
-  const fetchDashboard = async () => {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadDashboard = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem("token");
 
       if (!token) {
-        setLoading(false);
+        router.replace("/login");
         return;
       }
 
-      API.defaults.headers.common["Authorization"] =
-        `Bearer ${token}`;
+      API.defaults.headers.common.Authorization = `Bearer ${token}`;
 
-      const res = await API.get("/dashboard");
+      const [dashboardResponse, subscriptionResponse] =
+        await Promise.allSettled([
+          API.get("/dashboard"),
+          API.get("/payments/candidate/subscription-status"),
+        ]);
 
-      console.log(
-        "CANDIDATE DASHBOARD DATA:",
-        res.data
-      );
+      if (dashboardResponse.status === "fulfilled") {
+        setDashboard(dashboardResponse.value.data || null);
+      }
 
-      setData(res.data);
-
-    } catch (err: any) {
-      console.log(
+      if (subscriptionResponse.status === "fulfilled") {
+        setSubscription(subscriptionResponse.value.data || null);
+      }
+    } catch (error: any) {
+      console.error(
         "CANDIDATE DASHBOARD ERROR:",
-        err?.response?.data || err.message
+        error?.response?.data || error?.message || error
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchDashboard();
-    }, [])
+      loadDashboard();
+    }, [loadDashboard])
   );
 
-  // ==========================
-  // LOADING
-  // ==========================
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadDashboard();
+  };
+
+  const getCandidateName = () => {
+    const user = dashboard?.user;
+    const candidate = dashboard?.candidate || dashboard?.profile;
+
+    if (candidate?.firstName) {
+      return `${candidate.firstName}${
+        candidate.surname ? ` ${candidate.surname}` : ""
+      }`;
+    }
+
+    if (user?.firstName) {
+      return `${user.firstName}${user.surname ? ` ${user.surname}` : ""}`;
+    }
+
+    if (user?.name) {
+      return user.name;
+    }
+
+    return "Candidate";
+  };
+
+  const isMarketplaceActive = Boolean(
+    subscription?.active === true ||
+      subscription?.status === "active" ||
+      subscription?.subscriptionStatus === "active"
+  );
+
+  const subscriptionExpiry =
+    subscription?.expiry || subscription?.subscriptionExpiry || null;
+
+  const isProfileVerified = Boolean(
+    subscription?.profileVerified ||
+      subscription?.verifiedBadge ||
+      dashboard?.candidate?.profileVerified ||
+      dashboard?.candidate?.verifiedBadge ||
+      dashboard?.profile?.profileVerified ||
+      dashboard?.profile?.verifiedBadge
+  );
+
+  const profileCompleted = Boolean(
+    dashboard?.candidate?.profileCompleted ||
+      dashboard?.profile?.profileCompleted ||
+      dashboard?.profileCompleted
+  );
+
+  const getSubscriptionLabel = () => {
+    if (isMarketplaceActive) {
+      return "Active";
+    }
+
+    const status =
+      subscription?.status || subscription?.subscriptionStatus || "";
+
+    if (status === "expired") {
+      return "Expired";
+    }
+
+    if (status === "pending") {
+      return "Payment Pending";
+    }
+
+    return "Not Active";
+  };
+
+  const formatExpiry = () => {
+    if (!subscriptionExpiry) {
+      return "Not active";
+    }
+
+    const date = new Date(subscriptionExpiry);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Not available";
+    }
+
+    return date.toLocaleDateString("en-ZA", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const openMarketplace = () => {
+    router.push("/(candidate)/marketplace");
+  };
+
+  const openProfile = () => {
+    router.push("/(candidate)/profile-builder");
+  };
+
+  const openVerification = () => {
+    router.push("/(candidate)/verification-info");
+  };
+
+  const openInbox = () => {
+    router.push("/(candidate)/inbox");
+  };
+
+  const openNotifications = () => {
+    router.push("/(candidate)/notifications");
+  };
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color="#2E7D32"
-        />
-      </View>
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.loadingText}>Loading your dashboard...</Text>
+      </SafeAreaView>
     );
   }
-
-  // ==========================
-  // FAILED TO LOAD
-  // ==========================
-
-  if (!data) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>
-          Failed to load dashboard.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={fetchDashboard}
-        >
-          <Text style={styles.actionButtonText}>
-            Try Again
-          </Text>
-        </TouchableOpacity>
-
-        <LogoutButton />
-      </View>
-    );
-  }
-
-  // ==========================
-  // PROFILE
-  // ==========================
-
-  const profile = data?.profile;
-
-  // ==========================
-  // NO PROFILE YET
-  // ==========================
-
-  if (!profile) {
-    return (
-      <ScrollView
-        style={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
-        <DashboardHeader
-          title="Welcome 👋"
-          subtitle="Professional Candidate Dashboard"
-        />
-
-        <DashboardCard title="Create Your Candidate Profile">
-          <Text style={styles.info}>
-            You haven't created your candidate profile yet.
-          </Text>
-
-          <Text style={styles.info}>
-            Complete your profile so employers can discover
-            your skills, experience, qualifications and
-            availability.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() =>
-              router.push("/profile-builder")
-            }
-          >
-            <Text style={styles.actionButtonText}>
-              👤 Create Candidate Profile
-            </Text>
-          </TouchableOpacity>
-        </DashboardCard>
-
-        <DashboardCard title="Verification">
-          <Text style={styles.info}>
-            After creating your profile, you can complete
-            your verification documents and request your
-            verification badge.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.verifyButton}
-            onPress={() =>
-              router.push("/verify")
-            }
-          >
-            <Text style={styles.actionButtonText}>
-              ✔ Go to Verification
-            </Text>
-          </TouchableOpacity>
-        </DashboardCard>
-
-        <SectionTitle title="Quick Actions" />
-
-        <DashboardButton
-          title="💳 Pay Verification"
-          onPress={() =>
-            router.push("/(candidate)/verification-info")
-          }
-        />
-
-        <DashboardButton
-          title="💬 Inbox"
-          onPress={() =>
-            router.push("/messaging/inbox")
-          }
-        />
-
-        <DashboardButton
-          title="🔔 Notifications"
-          onPress={() =>
-            router.push("/notifications")
-          }
-        />
-
-        <View style={{ height: 40 }} />
-
-        <LogoutButton />
-      </ScrollView>
-    );
-  }
-
-  // ==========================
-  // PROFILE COMPLETION
-  // ==========================
-
-  const calculateProfileCompletion = () => {
-    const checks = [
-      !!profile?.profilePhoto,
-      !!profile?.bio,
-      profile?.workerTypes?.length > 0,
-      profile?.skills?.length > 0,
-      profile?.languages?.length > 0,
-      profile?.yearsExperience >= 0,
-      !!profile?.province,
-      !!profile?.city,
-      !!profile?.documents?.idDocument,
-      !!profile?.documents?.cv,
-      profile?.references?.length > 0,
-      profile?.qualifications?.length > 0,
-    ];
-
-    const completed =
-      checks.filter(Boolean).length;
-
-    return Math.round(
-      (completed / checks.length) * 100
-    );
-  };
-
-  const profileCompletion =
-    calculateProfileCompletion();
-
-  // ==========================
-  // NORMAL DASHBOARD
-  // ==========================
 
   return (
-    <ScrollView
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-    >
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.smallHeaderText}>NAKKY ACADEMY</Text>
 
-      {/* ============================= */}
-      {/* HEADER */}
-      {/* ============================= */}
+            <Text style={styles.welcomeText}>
+              Welcome, {getCandidateName()}
+            </Text>
 
-      <DashboardHeader
-        title={`Welcome ${
-          profile?.firstName ||
-          profile?.name?.split(" ")[0] ||
-          "Candidate"
-        } 👋`}
-        subtitle="Professional Candidate Dashboard"
-      />
+            <Text style={styles.headerSubtitle}>
+              Your candidate dashboard
+            </Text>
+          </View>
 
-      {/* ============================= */}
-      {/* PROFILE SUMMARY */}
-      {/* ============================= */}
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={openNotifications}
+          >
+            <Text style={styles.notificationIcon}>🔔</Text>
+          </TouchableOpacity>
+        </View>
 
-      <DashboardCard title="Profile Completion">
+        {/* MARKETPLACE BANNER */}
+        <TouchableOpacity
+          style={styles.marketplaceBanner}
+          onPress={openMarketplace}
+          activeOpacity={0.9}
+        >
+          <View style={styles.marketplaceBannerContent}>
+            <Text style={styles.marketplaceEyebrow}>NAKKY MARKETPLACE</Text>
 
-        <Text style={styles.progressPercentage}>
-          {profileCompletion}%
-        </Text>
+            <Text style={styles.marketplaceTitle}>
+              Find opportunities and employers
+            </Text>
 
-        <View style={styles.progressBarBackground}>
+            <Text style={styles.marketplaceText}>
+              Browse employers, jobs, recommendations and manage your
+              marketplace activity.
+            </Text>
+
+            <View style={styles.marketplaceButton}>
+              <Text style={styles.marketplaceButtonText}>
+                Open Marketplace →
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* SUBSCRIPTION STATUS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Marketplace Access</Text>
+
           <View
             style={[
-              styles.progressBarFill,
-              {
-                width: `${profileCompletion}%`,
-              },
+              styles.statusCard,
+              isMarketplaceActive
+                ? styles.statusCardActive
+                : styles.statusCardInactive,
             ]}
-          />
-        </View>
-
-        <View style={styles.checkRow}>
-
-          <Text style={styles.checkText}>
-            {profile?.profilePhoto
-              ? "✅"
-              : "❌"}{" "}
-            Profile Photo
-          </Text>
-
-          <Text style={styles.checkText}>
-            {profile?.workerTypes?.length
-              ? "✅"
-              : "❌"}{" "}
-            Profession
-          </Text>
-
-        </View>
-
-        <View style={styles.checkRow}>
-
-          <Text style={styles.checkText}>
-            {profile?.yearsExperience >= 0
-              ? "✅"
-              : "❌"}{" "}
-            Experience
-          </Text>
-
-          <Text style={styles.checkText}>
-            {profile?.skills?.length
-              ? "✅"
-              : "❌"}{" "}
-            Skills
-          </Text>
-
-        </View>
-
-        <View style={styles.checkRow}>
-
-          <Text style={styles.checkText}>
-            {profile?.languages?.length
-              ? "✅"
-              : "❌"}{" "}
-            Languages
-          </Text>
-
-          <Text style={styles.checkText}>
-            {profile?.documents?.cv
-              ? "✅"
-              : "❌"}{" "}
-            CV
-          </Text>
-
-        </View>
-
-        <View style={styles.checkRow}>
-
-          <Text style={styles.checkText}>
-            {profile?.references?.length
-              ? "✅"
-              : "❌"}{" "}
-            References
-          </Text>
-
-          <Text style={styles.checkText}>
-            {profile?.qualifications?.length
-              ? "✅"
-              : "❌"}{" "}
-            Qualifications
-          </Text>
-
-        </View>
-
-        <View style={styles.checkRow}>
-
-          <Text style={styles.checkText}>
-            {profile?.documents?.idDocument
-              ? "✅"
-              : "❌"}{" "}
-            ID
-          </Text>
-
-          <Text style={styles.checkText}>
-            {profile?.profileVerified
-              ? "✅ Verified"
-              : "🟡 Verification Pending"}
-          </Text>
-
-        </View>
-
-      </DashboardCard>
-
-      {/* ============================= */}
-      {/* QUICK ACTIONS */}
-      {/* ============================= */}
-
-      <SectionTitle title="Quick Actions" />
-
-      <DashboardButton
-        title={
-          profile?.profileCompleted
-            ? "✏ Edit Profile"
-            : "👤 Complete Profile"
-        }
-        onPress={() =>
-          router.push("/profile-builder")
-        }
-      />
-
-      <DashboardButton
-        title="✔ Verification"
-        onPress={() =>
-          router.push("/verify")
-        }
-      />
-
-      <DashboardButton
-        title="💳 Pay Verification"
-        onPress={() =>
-          router.push("/(candidate)/verification-info")
-        }
-      />
-
-      <DashboardButton
-        title="💬 Inbox"
-        onPress={() =>
-          router.push("/messaging/inbox")
-        }
-      />
-
-      <DashboardButton
-        title="🔔 Notifications"
-        onPress={() =>
-          router.push("/notifications")
-        }
-      />
-
-      {/* ============================= */}
-      {/* RECENT MESSAGES */}
-      {/* ============================= */}
-
-      <SectionTitle title="Recent Messages" />
-
-      {data?.messages?.length ? (
-
-        data.messages
-          .slice(0, 3)
-          .map((msg: any) => (
-
-            <DashboardCard
-              key={msg._id}
-              title={
-                msg.sender?.firstName ||
-                msg.sender?.name ||
-                "User"
-              }
-            >
-
-              <Text style={styles.info}>
-                {msg.message}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() =>
-                  router.push({
-                    pathname:
-                      "/messaging/[userId]",
-                    params: {
-                      userId:
-                        msg.sender?._id,
-                      name:
-                        msg.sender?.firstName ||
-                        msg.sender?.name ||
-                        "User",
-                    },
-                  })
-                }
-              >
+          >
+            <View style={styles.statusHeader}>
+              <View>
+                <Text style={styles.statusLabel}>Annual Subscription</Text>
 
                 <Text
-                  style={
-                    styles.actionButtonText
-                  }
+                  style={[
+                    styles.statusValue,
+                    isMarketplaceActive
+                      ? styles.activeText
+                      : styles.inactiveText,
+                  ]}
                 >
-                  Open Conversation
+                  {getSubscriptionLabel()}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.statusBadge,
+                  isMarketplaceActive
+                    ? styles.statusBadgeActive
+                    : styles.statusBadgeInactive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    isMarketplaceActive
+                      ? styles.statusBadgeTextActive
+                      : styles.statusBadgeTextInactive,
+                  ]}
+                >
+                  {isMarketplaceActive ? "ACTIVE" : "INACTIVE"}
+                </Text>
+              </View>
+            </View>
+
+            {isMarketplaceActive && subscriptionExpiry ? (
+              <Text style={styles.expiryText}>
+                Active until {formatExpiry()}
+              </Text>
+            ) : (
+              <Text style={styles.statusDescription}>
+                Your R200 candidate verification payment also provides your
+                annual marketplace subscription.
+              </Text>
+            )}
+
+            {!isMarketplaceActive && (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={openVerification}
+              >
+                <Text style={styles.primaryButtonText}>
+                  Verification & Annual Subscription
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {isMarketplaceActive && (
+              <Text style={styles.communicationNote}>
+                ✓ You can communicate with employers who also have an active
+                subscription.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* PROFILE STATUS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Candidate Profile</Text>
+
+          <View style={styles.profileStatusCard}>
+            <View style={styles.profileStatusRow}>
+              <View>
+                <Text style={styles.profileStatusTitle}>
+                  {profileCompleted
+                    ? "Profile completed"
+                    : "Complete your profile"}
                 </Text>
 
-              </TouchableOpacity>
+                <Text style={styles.profileStatusText}>
+                  {profileCompleted
+                    ? "Employers can view your marketplace profile."
+                    : "Complete your profile so employers can discover you."}
+                </Text>
+              </View>
 
-            </DashboardCard>
-
-          ))
-
-      ) : (
-
-        <DashboardCard title="Messages">
-
-          <Text style={styles.emptyText}>
-            No recent messages.
-          </Text>
-
-        </DashboardCard>
-
-      )}
-
-      {/* ============================= */}
-      {/* NOTIFICATIONS */}
-      {/* ============================= */}
-
-      <SectionTitle title="Notifications" />
-
-      {data?.notifications?.length ? (
-
-        data.notifications
-          .slice(0, 3)
-          .map((notification: any) => (
-
-            <DashboardCard
-              key={notification._id}
-              title={notification.title}
-            >
-
-              <Text style={styles.info}>
-                {notification.message}
+              <Text style={styles.profileStatusIcon}>
+                {profileCompleted ? "✓" : "!"}
               </Text>
+            </View>
 
-            </DashboardCard>
+            <TouchableOpacity
+              style={styles.outlineButton}
+              onPress={openProfile}
+            >
+              <Text style={styles.outlineButtonText}>
+                {profileCompleted ? "Edit My Profile" : "Build My Profile"}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-          ))
+          {isProfileVerified && (
+            <View style={styles.verifiedCard}>
+              <Text style={styles.verifiedIcon}>✓</Text>
 
-      ) : (
+              <View style={styles.verifiedContent}>
+                <Text style={styles.verifiedTitle}>
+                  Nakky Verified Candidate
+                </Text>
 
-        <DashboardCard title="Notifications">
+                <Text style={styles.verifiedText}>
+                  Your candidate verification has been approved.
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
 
-          <Text style={styles.emptyText}>
-            No notifications.
+        {/* MARKETPLACE */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Marketplace</Text>
+
+          <View style={styles.grid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={openMarketplace}
+            >
+              <Text style={styles.actionIcon}>🔎</Text>
+
+              <Text style={styles.actionTitle}>Find Opportunities</Text>
+
+              <Text style={styles.actionText}>
+                Browse employers, jobs and opportunities.
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={openMarketplace}
+            >
+              <Text style={styles.actionIcon}>⭐</Text>
+
+              <Text style={styles.actionTitle}>Recommendations</Text>
+
+              <Text style={styles.actionText}>
+                See recommended marketplace matches.
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ACCOUNT */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My Account</Text>
+
+          <TouchableOpacity style={styles.menuRow} onPress={openProfile}>
+            <View style={styles.menuIconContainer}>
+              <Text style={styles.menuIcon}>👤</Text>
+            </View>
+
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>My Candidate Profile</Text>
+
+              <Text style={styles.menuText}>
+                Update your information, experience and documents.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuRow} onPress={openInbox}>
+            <View style={styles.menuIconContainer}>
+              <Text style={styles.menuIcon}>💬</Text>
+            </View>
+
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Messages</Text>
+
+              <Text style={styles.menuText}>
+                Communicate with employers when both accounts are subscribed.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={openVerification}
+          >
+            <View style={styles.menuIconContainer}>
+              <Text style={styles.menuIcon}>🛡️</Text>
+            </View>
+
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Verification & Subscription</Text>
+
+              <Text style={styles.menuText}>
+                Manage your R200 annual verification and marketplace access.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={openNotifications}
+          >
+            <View style={styles.menuIconContainer}>
+              <Text style={styles.menuIcon}>🔔</Text>
+            </View>
+
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Notifications</Text>
+
+              <Text style={styles.menuText}>
+                View messages and important account notifications.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* RULE NOTICE */}
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>How marketplace communication works</Text>
+
+          <Text style={styles.infoText}>
+            You can create your profile, upload documents, browse opportunities
+            and be discovered before paying.
           </Text>
 
-        </DashboardCard>
+          <Text style={styles.infoText}>
+            Your R200 verification payment activates your candidate
+            verification and one-year marketplace subscription after approval.
+          </Text>
 
-      )}
+          <Text style={styles.infoText}>
+            Direct communication requires both the candidate and employer to
+            have active subscriptions.
+          </Text>
+        </View>
 
-      <View style={{ height: 40 }} />
-
-      <LogoutButton />
-
-    </ScrollView>
+        <View style={styles.footerSpace} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
-    paddingHorizontal: 18,
-    paddingTop: 20,
+    backgroundColor: "#F7F7F9",
   },
 
-  center: {
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F5F7FA",
-    padding: 20,
+    backgroundColor: "#F7F7F9",
   },
 
-  errorText: {
-    fontSize: 16,
-    color: "#D32F2F",
-    marginBottom: 20,
-    textAlign: "center",
+  loadingText: {
+    marginTop: 12,
+    color: "#666",
+    fontSize: 15,
   },
 
-  info: {
-    fontSize: 16,
-    color: "#555",
-    marginBottom: 12,
-    lineHeight: 24,
+  content: {
+    padding: 18,
+    paddingBottom: 40,
   },
 
-  actionButton: {
-    backgroundColor: "#2E7D32",
-    marginTop: 18,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-
-  verifyButton: {
-    backgroundColor: "#1976D2",
-    marginTop: 10,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-
-  retryButton: {
-    backgroundColor: "#2E7D32",
-    paddingVertical: 14,
-    paddingHorizontal: 30,
-    borderRadius: 12,
-    marginBottom: 25,
-  },
-
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-
-  progressPercentage: {
-    fontSize: 34,
-    fontWeight: "bold",
-    color: "#2E7D32",
-    textAlign: "center",
-    marginBottom: 15,
-  },
-
-  progressBarBackground: {
-    height: 10,
-    backgroundColor: "#E0E0E0",
-    borderRadius: 10,
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-
-  progressBarFill: {
-    height: 10,
-    backgroundColor: "#2E7D32",
-  },
-
-  checkRow: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    alignItems: "center",
+    marginBottom: 18,
   },
 
-  checkText: {
-    fontSize: 15,
-    color: "#444",
-    flex: 1,
+  smallHeaderText: {
+    color: "#D6007F",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    marginBottom: 5,
   },
 
-  emptyText: {
-    color: "#888",
-    fontSize: 15,
+  welcomeText: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#171717",
+  },
+
+  headerSubtitle: {
+    color: "#777",
+    fontSize: 14,
+    marginTop: 4,
+  },
+
+  notificationButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+  },
+
+  notificationIcon: {
+    fontSize: 21,
+  },
+
+  marketplaceBanner: {
+    backgroundColor: "#D6007F",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 22,
+    elevation: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+  },
+
+  marketplaceBannerContent: {
+    width: "100%",
+  },
+
+  marketplaceEyebrow: {
+    color: "#FFD84D",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+
+  marketplaceTitle: {
+    color: "#FFFFFF",
+    fontSize: 23,
+    fontWeight: "800",
+    marginTop: 7,
+  },
+
+  marketplaceText: {
+    color: "#FFFFFF",
+    opacity: 0.92,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+
+  marketplaceButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginTop: 15,
+  },
+
+  marketplaceButtonText: {
+    color: "#D6007F",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  section: {
+    marginBottom: 22,
+  },
+
+  sectionTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#171717",
+    marginBottom: 10,
+  },
+
+  statusCard: {
+    borderRadius: 16,
+    padding: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+  },
+
+  statusCardActive: {
+    borderColor: "#A9D8B4",
+  },
+
+  statusCardInactive: {
+    borderColor: "#E5D1DC",
+  },
+
+  statusHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  statusLabel: {
+    color: "#777",
+    fontSize: 13,
+    marginBottom: 4,
+  },
+
+  statusValue: {
+    fontSize: 21,
+    fontWeight: "800",
+  },
+
+  activeText: {
+    color: "#198754",
+  },
+
+  inactiveText: {
+    color: "#D6007F",
+  },
+
+  statusBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+
+  statusBadgeActive: {
+    backgroundColor: "#E5F5E9",
+  },
+
+  statusBadgeInactive: {
+    backgroundColor: "#FCEAF3",
+  },
+
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  statusBadgeTextActive: {
+    color: "#198754",
+  },
+
+  statusBadgeTextInactive: {
+    color: "#D6007F",
+  },
+
+  expiryText: {
+    color: "#666",
+    fontSize: 13,
+    marginTop: 10,
+  },
+
+  statusDescription: {
+    color: "#666",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+  },
+
+  primaryButton: {
+    backgroundColor: "#D6007F",
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 15,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  communicationNote: {
+    color: "#198754",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 10,
+    fontWeight: "600",
+  },
+
+  profileStatusCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: "#E7E7E7",
+  },
+
+  profileStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  profileStatusTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#222",
+  },
+
+  profileStatusText: {
+    color: "#777",
+    fontSize: 13,
+    marginTop: 5,
+    maxWidth: "88%",
+    lineHeight: 18,
+  },
+
+  profileStatusIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FCEAF3",
+    color: "#D6007F",
     textAlign: "center",
-    paddingVertical: 15,
+    textAlignVertical: "center",
+    fontWeight: "900",
+    fontSize: 18,
+    overflow: "hidden",
   },
 
+  outlineButton: {
+    borderWidth: 1.5,
+    borderColor: "#D6007F",
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: "center",
+    marginTop: 15,
+  },
+
+  outlineButtonText: {
+    color: "#D6007F",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+
+  verifiedCard: {
+    marginTop: 10,
+    backgroundColor: "#FFF9E5",
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  verifiedIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFD84D",
+    color: "#171717",
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+    textAlignVertical: "center",
+    overflow: "hidden",
+  },
+
+  verifiedContent: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  verifiedTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#222",
+  },
+
+  verifiedText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 3,
+  },
+
+  grid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  actionCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    padding: 15,
+    minHeight: 145,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+  },
+
+  actionIcon: {
+    fontSize: 26,
+    marginBottom: 10,
+  },
+
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#222",
+  },
+
+  actionText: {
+    color: "#777",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+
+  menuRow: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    padding: 14,
+    marginBottom: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E9E9E9",
+  },
+
+  menuIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FCEAF3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  menuIcon: {
+    fontSize: 20,
+  },
+
+  menuContent: {
+    flex: 1,
+    marginLeft: 12,
+    paddingRight: 8,
+  },
+
+  menuTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#222",
+  },
+
+  menuText: {
+    color: "#777",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+
+  arrow: {
+    fontSize: 28,
+    color: "#AAA",
+  },
+
+  infoCard: {
+    backgroundColor: "#F0F0F2",
+    borderRadius: 15,
+    padding: 16,
+    marginTop: 2,
+  },
+
+  infoTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#222",
+    marginBottom: 8,
+  },
+
+  infoText: {
+    fontSize: 12,
+    color: "#666",
+    lineHeight: 18,
+    marginBottom: 7,
+  },
+
+  footerSpace: {
+    height: 20,
+  },
 });

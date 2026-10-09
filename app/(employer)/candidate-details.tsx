@@ -382,6 +382,36 @@ const viewCandidateDocument = async (
     }
   };
 
+// ==========================================
+// REQUEST INTERVIEW
+// ==========================================
+
+const requestInterview = () => {
+  const recipientId =
+    candidate?.user?._id ||
+    candidate?.user;
+
+  if (!recipientId) {
+    Alert.alert(
+      "Unable to Continue",
+      "The candidate's account could not be identified."
+    );
+    return;
+  }
+
+  router.push({
+    pathname: "/request-interview",
+    params: {
+      recipientId: String(recipientId),
+      recipientName: String(
+        candidate?.firstName ||
+        candidate?.name ||
+        "Candidate"
+      ),
+    },
+  });
+};
+
 const saveCandidate = async () => {
   try {
     const token = await AsyncStorage.getItem("token");
@@ -1030,6 +1060,15 @@ if (candidate) {
         {/* ACTION BUTTONS */}
         {/* ========================= */}
 
+        <TouchableOpacity
+          style={styles.interviewButton}
+          onPress={requestInterview}
+        >
+          <Text style={styles.interviewButtonText}>
+            📅 Request Interview
+          </Text>
+        </TouchableOpacity>
+
         {subscriptionActive ? (
           <TouchableOpacity
             style={styles.contactButton}
@@ -1414,6 +1453,21 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontWeight: "600",
     marginTop: 10,
+  },
+
+  interviewButton: {
+    backgroundColor: "#D90072",
+    marginHorizontal: 18,
+    marginTop: 10,
+    paddingVertical: 18,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+
+  interviewButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
   },
 
   contactButton: {

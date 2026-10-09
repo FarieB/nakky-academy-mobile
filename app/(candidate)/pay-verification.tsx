@@ -1,7 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-
 import {
   ActivityIndicator,
   Alert,
@@ -16,270 +14,272 @@ import * as Clipboard from "expo-clipboard";
 
 import API from "../../src/services/api";
 
+// =====================================================
+// TYPES
+// =====================================================
 
 interface PaymentDetails {
-
   paymentId: string;
-
   accountName: string;
-
   bankName: string;
-
   accountNumber: string;
-
   branchCode: string;
-
   accountType: string;
-
   paymentReference: string;
-
   amount: number;
-
 }
 
+// =====================================================
+// SCREEN
+// =====================================================
 
 export default function PayVerificationScreen() {
-
   const router = useRouter();
 
-
-  const [loading, setLoading] =
-    useState(true);
-
+  const [loading, setLoading] = useState(true);
 
   const [paymentDetails, setPaymentDetails] =
     useState<PaymentDetails | null>(null);
 
-
-  // ==========================================
+  // =====================================================
   // COPY TEXT
-  // ==========================================
+  // =====================================================
 
   const copyText = async (
     text: string,
     label: string
   ) => {
-
     try {
-
       await Clipboard.setStringAsync(text);
 
       Alert.alert(
         "Copied",
         `${label} copied successfully.`
       );
-
-    }
-
-    catch (error) {
-
+    } catch (error) {
       Alert.alert(
         "Error",
         "Failed to copy text."
       );
-
     }
-
   };
 
+  // =====================================================
+  // CREATE VERIFICATION + ANNUAL SUBSCRIPTION PAYMENT
+  // =====================================================
 
-  // ==========================================
-  // CREATE VERIFICATION PAYMENT
-  // ==========================================
+  const createVerificationPayment = async () => {
+    try {
+      setLoading(true);
+      setPaymentDetails(null);
 
-  const createVerificationPayment =
-    async () => {
+      const res = await API.post(
+        "/payments/verification"
+      );
 
-      try {
+      console.log(
+        "VERIFICATION PAYMENT RESPONSE:",
+        res.data
+      );
 
-        setLoading(true);
+      // =================================================
+      // EXTRACT RESPONSE
+      // =================================================
 
+      const payment =
+        res.data?.payment;
 
-        const token =
-          await AsyncStorage.getItem(
-            "token"
-          );
+      const bankingDetails =
+        res.data?.bankingDetails;
 
+      // =================================================
+      // VALIDATE PAYMENT DETAILS
+      // =================================================
 
-        if (!token) {
-
-          Alert.alert(
-            "Session Expired",
-            "Please login again."
-          );
-
-          return;
-
-        }
-
-
-        API.defaults.headers.common[
-          "Authorization"
-        ] =
-          `Bearer ${token}`;
-
-
-        const res =
-          await API.post(
-            "/payments/verification"
-          );
-
-
+      if (
+        !payment?._id ||
+        !payment?.paymentReference ||
+        !payment?.amount ||
+        !bankingDetails?.accountName ||
+        !bankingDetails?.bankName ||
+        !bankingDetails?.accountNumber ||
+        !bankingDetails?.branchCode
+      ) {
         console.log(
-          "VERIFICATION PAYMENT RESPONSE:",
+          "INVALID PAYMENT RESPONSE:",
           res.data
         );
 
-
-        // ====================================
-        // EXTRACT RESPONSE
-        // ====================================
-
-        const payment =
-          res.data?.payment;
-
-
-        const bankingDetails =
-          res.data?.bankingDetails;
-
-
-        // ====================================
-        // VALIDATE PAYMENT DETAILS
-        // ====================================
-
-        if (
-          !payment?._id ||
-          !payment?.paymentReference ||
-          !payment?.amount ||
-          !bankingDetails?.accountName ||
-          !bankingDetails?.bankName ||
-          !bankingDetails?.accountNumber ||
-          !bankingDetails?.branchCode
-        ) {
-
-          console.log(
-            "INVALID PAYMENT RESPONSE:",
-            res.data
-          );
-
-
-          throw new Error(
-            "The server did not generate valid payment details."
-          );
-
-        }
-
-
-        // ====================================
-        // SAVE CLEAN PAYMENT DETAILS
-        // ====================================
-
-        setPaymentDetails({
-
-          paymentId:
-            String(payment._id),
-
-          amount:
-            Number(payment.amount),
-
-          paymentReference:
-            String(
-              payment.paymentReference
-            ),
-
-          accountName:
-            String(
-              bankingDetails.accountName
-            ),
-
-          bankName:
-            String(
-              bankingDetails.bankName
-            ),
-
-          accountNumber:
-            String(
-              bankingDetails.accountNumber
-            ),
-
-          branchCode:
-            String(
-              bankingDetails.branchCode
-            ),
-
-          accountType:
-            String(
-              bankingDetails.accountType || ""
-            )
-
-        });
-
+        throw new Error(
+          "The server did not generate valid payment details."
+        );
       }
 
-      catch (err: any) {
+      // =================================================
+      // SAVE CLEAN PAYMENT DETAILS
+      // =================================================
 
-        console.log(
-          "VERIFICATION PAYMENT ERROR:",
-          err?.response?.data ||
+      setPaymentDetails({
+        paymentId: String(
+          payment._id
+        ),
+
+        amount: Number(
+          payment.amount
+        ),
+
+        paymentReference: String(
+          payment.paymentReference
+        ),
+
+        accountName: String(
+          bankingDetails.accountName
+        ),
+
+        bankName: String(
+          bankingDetails.bankName
+        ),
+
+        accountNumber: String(
+          bankingDetails.accountNumber
+        ),
+
+        branchCode: String(
+          bankingDetails.branchCode
+        ),
+
+        accountType: String(
+          bankingDetails.accountType || ""
+        ),
+      });
+    } catch (err: any) {
+      console.log(
+        "VERIFICATION PAYMENT ERROR:",
+        err?.response?.data ||
           err?.message
+      );
+
+      const status =
+        err?.response?.status;
+
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "";
+
+      // =================================================
+      // ACTIVE SUBSCRIPTION
+      // =================================================
+      //
+      // The backend prevents a candidate from creating
+      // another R200 verification/subscription payment
+      // while their current annual subscription is active.
+      //
+      // In that situation, send them back to the dashboard
+      // instead of showing a generic payment error.
+      // =================================================
+
+      const activeSubscription =
+        status === 400 &&
+        (
+          message
+            .toLowerCase()
+            .includes("active") ||
+          message
+            .toLowerCase()
+            .includes("subscription") ||
+          message
+            .toLowerCase()
+            .includes("verified")
         );
 
-
+      if (activeSubscription) {
         Alert.alert(
-
-          "Payment Error",
-
-          err?.response?.data?.message ||
-
-          err?.message ||
-
-          "Failed to generate EFT payment details."
-
+          "Subscription Already Active",
+          message ||
+            "Your verification and annual marketplace subscription are already active.",
+          [
+            {
+              text: "Go to Dashboard",
+              onPress: () => {
+                router.replace(
+                  "/(candidate)/candidate-dashboard" as any
+                );
+              },
+            },
+          ]
         );
 
+        return;
       }
 
-      finally {
+      // =================================================
+      // SESSION / AUTH ERROR
+      // =================================================
 
-        setLoading(false);
+      if (
+        status === 401 ||
+        status === 403
+      ) {
+        Alert.alert(
+          "Session Expired",
+          "Please login again.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                router.replace(
+                  "/login" as any
+                );
+              },
+            },
+          ]
+        );
 
+        return;
       }
 
-    };
+      // =================================================
+      // NORMAL PAYMENT ERROR
+      // =================================================
 
+      Alert.alert(
+        "Payment Error",
+        message ||
+          "Failed to generate EFT payment details."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // LOAD PAYMENT DETAILS
+  // =====================================================
 
   useEffect(() => {
-
     createVerificationPayment();
-
   }, []);
 
-
-  // ==========================================
+  // =====================================================
   // GO TO PROOF UPLOAD
-  // ==========================================
+  // =====================================================
 
   const handlePaymentMade = () => {
-
     if (!paymentDetails) {
-
       Alert.alert(
         "Error",
         "Payment details are missing."
       );
 
       return;
-
     }
 
-
     router.push({
-
       pathname:
         "/(candidate)/upload-proof" as any,
 
       params: {
-
         paymentId:
           paymentDetails.paymentId,
 
@@ -287,152 +287,116 @@ export default function PayVerificationScreen() {
           paymentDetails.paymentReference,
 
         amount:
-          String(paymentDetails.amount)
-
-      }
-
+          String(
+            paymentDetails.amount
+          ),
+      },
     });
-
   };
 
-
-  // ==========================================
+  // =====================================================
   // LOADING
-  // ==========================================
+  // =====================================================
 
   if (loading) {
-
     return (
-
       <View style={styles.center}>
-
         <ActivityIndicator
           size="large"
           color="#d81b60"
         />
 
         <Text style={styles.loadingText}>
-
           Generating your EFT payment details...
-
         </Text>
-
       </View>
-
     );
-
   }
 
-
-  // ==========================================
+  // =====================================================
   // FAILED
-  // ==========================================
+  // =====================================================
 
   if (!paymentDetails) {
-
     return (
-
       <View style={styles.center}>
-
         <Text style={styles.errorText}>
-
           Failed to load payment details.
-
         </Text>
-
 
         <TouchableOpacity
           style={styles.button}
-          onPress={createVerificationPayment}
+          onPress={
+            createVerificationPayment
+          }
         >
-
           <Text style={styles.buttonText}>
-
             Try Again
-
           </Text>
-
         </TouchableOpacity>
-
       </View>
-
     );
-
   }
 
-
-  // ==========================================
+  // =====================================================
   // PAYMENT SCREEN
-  // ==========================================
+  // =====================================================
 
   return (
-
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={
+        styles.content
+      }
     >
-
+      {/* =================================================
+          TITLE
+      ================================================= */}
 
       <Text style={styles.title}>
-
-        Candidate Verification Payment
-
+        Candidate Verification & Annual Subscription
       </Text>
-
 
       <Text style={styles.subtitle}>
-
-        Please make an EFT payment using the
-        banking details below.
-
+        Please make an EFT payment using
+        the banking details below.
       </Text>
 
-
-      {/* PAYMENT AMOUNT */}
+      {/* =================================================
+          PAYMENT AMOUNT
+      ================================================= */}
 
       <View style={styles.amountCard}>
-
         <Text style={styles.amountLabel}>
-
-          Verification Fee
-
+          Verification & Annual Subscription
         </Text>
-
 
         <Text style={styles.amount}>
-
           R{paymentDetails.amount}
-
         </Text>
 
+        <Text style={styles.amountInfo}>
+          Valid for 12 months after approval
+        </Text>
       </View>
 
-
-      {/* PAYMENT REFERENCE */}
+      {/* =================================================
+          PAYMENT REFERENCE
+      ================================================= */}
 
       <View style={styles.referenceCard}>
-
         <Text style={styles.sectionTitle}>
-
           ⚠️ Important Payment Reference
-
         </Text>
-
 
         <Text style={styles.reference}>
-
           {paymentDetails.paymentReference}
-
         </Text>
-
 
         <Text style={styles.referenceInfo}>
-
-          Please use this exact reference when
-          making your EFT payment.
-
+          Please use this exact reference
+          when making your EFT payment.
         </Text>
-
 
         <TouchableOpacity
           style={styles.copyButton}
@@ -443,61 +407,40 @@ export default function PayVerificationScreen() {
             )
           }
         >
-
           <Text style={styles.copyButtonText}>
-
             Copy Reference
-
           </Text>
-
         </TouchableOpacity>
-
       </View>
 
-
-      {/* BANK DETAILS */}
+      {/* =================================================
+          BANK DETAILS
+      ================================================= */}
 
       <View style={styles.card}>
-
         <Text style={styles.sectionTitle}>
-
           Banking Details
-
         </Text>
 
-
         <Text style={styles.label}>
-
           Account Name
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.accountName}
-
         </Text>
 
-
         <Text style={styles.label}>
-
           Bank
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.bankName}
-
         </Text>
-
 
         <Text style={styles.label}>
-
           Account Number
-
         </Text>
-
 
         <TouchableOpacity
           onPress={() =>
@@ -507,129 +450,109 @@ export default function PayVerificationScreen() {
             )
           }
         >
-
           <Text style={styles.copyValue}>
-
             {paymentDetails.accountNumber}
-
           </Text>
-
         </TouchableOpacity>
 
-
         <Text style={styles.label}>
-
           Branch Code
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.branchCode}
-
         </Text>
-
 
         <Text style={styles.label}>
-
           Account Type
-
         </Text>
 
         <Text style={styles.value}>
-
           {paymentDetails.accountType}
-
         </Text>
-
       </View>
 
-
-      {/* NEXT STEPS */}
+      {/* =================================================
+          WHAT HAPPENS NEXT
+      ================================================= */}
 
       <View style={styles.infoCard}>
-
         <Text style={styles.sectionTitle}>
-
           What Happens Next?
-
         </Text>
 
-
         <Text style={styles.infoText}>
-
           1. Make an EFT payment of
+          {" "}
           R{paymentDetails.amount}.
-
         </Text>
 
-
         <Text style={styles.infoText}>
-
-          2. Use the payment reference shown above.
-
+          2. Use the payment reference
+          shown above.
         </Text>
 
-
         <Text style={styles.infoText}>
-
           3. Upload your proof of payment.
-
         </Text>
-
 
         <Text style={styles.infoText}>
-
-          4. Nakky Academy will review and verify
-          your payment.
-
+          4. Nakky Academy will review and
+          verify your payment.
         </Text>
-
 
         <Text style={styles.infoText}>
-
-          5. Your profile will receive a verified
-          badge once payment has been approved.
-
+          5. Once approved, your profile
+          will receive a verified badge.
         </Text>
 
+        <Text style={styles.infoText}>
+          6. Your 12-month marketplace
+          subscription will also be activated.
+        </Text>
+
+        <Text style={styles.infoText}>
+          7. While your subscription is
+          active, you can communicate directly
+          with active employers.
+        </Text>
       </View>
 
-
-      {/* PAYMENT MADE */}
+      {/* =================================================
+          PAYMENT MADE
+      ================================================= */}
 
       <TouchableOpacity
         style={styles.doneButton}
-        onPress={handlePaymentMade}
+        onPress={
+          handlePaymentMade
+        }
       >
-
         <Text style={styles.doneButtonText}>
-
           I Have Made the Payment
-
         </Text>
-
       </TouchableOpacity>
 
+      {/* =================================================
+          NOTE
+      ================================================= */}
 
       <Text style={styles.note}>
-
-        Your candidate profile will only be verified
-        after Nakky Academy has approved your EFT
-        payment.
-
+        Your candidate profile will only
+        be verified and your 12-month
+        marketplace subscription activated
+        after Nakky Academy has approved
+        your EFT payment.
       </Text>
-
-
     </ScrollView>
-
   );
-
 }
 
+// =====================================================
+// STYLES
+// =====================================================
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: "#fff",
@@ -652,12 +575,14 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontSize: 16,
     color: "#666",
+    textAlign: "center",
   },
 
   errorText: {
     fontSize: 16,
     color: "#d32f2f",
     marginBottom: 20,
+    textAlign: "center",
   },
 
   title: {
@@ -684,6 +609,7 @@ const styles = StyleSheet.create({
   amountLabel: {
     fontSize: 16,
     color: "#666",
+    textAlign: "center",
   },
 
   amount: {
@@ -691,6 +617,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#d81b60",
     marginTop: 8,
+  },
+
+  amountInfo: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
   },
 
   card: {
@@ -775,6 +708,7 @@ const styles = StyleSheet.create({
     padding: 17,
     borderRadius: 10,
     alignItems: "center",
+    minWidth: 140,
   },
 
   buttonText: {
@@ -802,5 +736,4 @@ const styles = StyleSheet.create({
     marginTop: 15,
     lineHeight: 20,
   },
-
 });
