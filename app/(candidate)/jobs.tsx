@@ -1,10 +1,8 @@
-
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
   RefreshControl,
   SafeAreaView,
@@ -17,9 +15,19 @@ import {
 } from "react-native";
 import API from "../../src/services/api";
 
+type EmployerDisplay = {
+  contactPerson?: string;
+  householdName?: string;
+  employerType?: string;
+  province?: string;
+  city?: string;
+  suburb?: string;
+};
+
 type Job = {
   _id: string;
   employer: string | { _id: string };
+  employerProfile?: EmployerDisplay | string;
   title: string;
   jobTypes?: string[];
   description: string;
@@ -81,7 +89,6 @@ export default function CandidateJobsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState("");
   const [jobType, setJobType] = useState("All Categories");
   const [province, setProvince] = useState("All Provinces");
   const [employmentType, setEmploymentType] = useState("All Types");
@@ -292,10 +299,6 @@ export default function CandidateJobsScreen() {
   const searchJobs = () => {
   const filters: Record<string, string> = {};
 
-  if (search.trim()) {
-    filters.keyword = search.trim();
-  }
-
   if (jobType !== "All Categories") {
     filters.jobType = jobType;
   }
@@ -344,7 +347,6 @@ export default function CandidateJobsScreen() {
 };
 
 const clearFilters = () => {
-  setSearch("");
   setJobType("All Categories");
   setProvince("All Provinces");
   setEmploymentType("All Types");
@@ -356,6 +358,18 @@ const clearFilters = () => {
   loadJobs(false, {});
 };
 
+
+  const getEmployerLabel = (job: Job) => {
+    if (!job.employerProfile || typeof job.employerProfile === "string") {
+      return "Nakky Academy employer";
+    }
+    return (
+      job.employerProfile.householdName?.trim() ||
+      job.employerProfile.contactPerson?.trim() ||
+      job.employerProfile.employerType ||
+      "Nakky Academy employer"
+    );
+  };
 
   const renderJob = ({ item }: { item: Job }) => (
     <TouchableOpacity
@@ -370,6 +384,9 @@ const clearFilters = () => {
             {item.city}
             {item.suburb ? `, ${item.suburb}` : ""}
             {item.province ? ` · ${item.province}` : ""}
+          </Text>
+          <Text style={styles.employerLabel}>
+            Posted by {getEmployerLabel(item)}
           </Text>
         </View>
         <Text style={styles.arrow}>›</Text>
@@ -401,213 +418,194 @@ const clearFilters = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.heading}>Available Jobs</Text>
-        <Text style={styles.subtitle}>
-          Find opportunities with Nakky Academy
-        </Text>
-      </View>
-
-            
-      <View style={styles.filters}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search jobs, skills or location..."
-          placeholderTextColor="#888"
-          value={search}
-          onChangeText={setSearch}
-          returnKeyType="search"
-          onSubmitEditing={searchJobs}
-        />
-
-        <Text style={styles.filterLabel}>Type of work</Text>
-        <View style={styles.typeRow}>
-          {[
-            "All Categories",
-            "Nanny",
-            "Caregiver",
-            "Babysitter",
-            "Housekeeper",
-            "Domestic Helper",
-            "Gardener",
-            "Cook",
-            "Driver",
-            "Au Pair",
-            "Disability Care",
-            "Elderly Care",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.typeChip,
-                jobType === item && styles.filterChipActive,
-              ]}
-              onPress={() => setJobType(item)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  jobType === item && styles.filterChipTextActive,
-                ]}
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.filterLabel}>Province</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {PROVINCES.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.filterChip,
-                province === item && styles.filterChipActive,
-              ]}
-              onPress={() => setProvince(item)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  province === item && styles.filterChipTextActive,
-                ]}
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.filterLabel}>Employment type</Text>
-        <View style={styles.typeRow}>
-          {EMPLOYMENT_TYPES.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.typeChip,
-                employmentType === item && styles.filterChipActive,
-              ]}
-              onPress={() => setEmploymentType(item)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  employmentType === item && styles.filterChipTextActive,
-                ]}
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.filterLabel}>Accommodation arrangement</Text>
-        <View style={styles.typeRow}>
-          {[
-            "Any Arrangement",
-            "Live In",
-            "Live Out",
-            "Flexible",
-          ].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.typeChip,
-                workArrangement === item && styles.filterChipActive,
-              ]}
-              onPress={() => setWorkArrangement(item)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  workArrangement === item && styles.filterChipTextActive,
-                ]}
-              >
-                {item === "Flexible" ? "Flexible / Either" : item}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.filterLabel}>Monthly or advertised salary range (R)</Text>
-        <View style={styles.salaryRow}>
-          <TextInput
-            style={[styles.searchInput, styles.salaryInput]}
-            placeholder="Minimum"
-            placeholderTextColor="#888"
-            value={minSalary}
-            onChangeText={setMinSalary}
-            keyboardType="numeric"
+      <ScrollView
+        style={styles.screenScroll}
+        contentContainerStyle={styles.screenContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadJobs(true, appliedFilters)}
+            tintColor="#D41472"
           />
-          <TextInput
-            style={[styles.searchInput, styles.salaryInput]}
-            placeholder="Maximum"
-            placeholderTextColor="#888"
-            value={maxSalary}
-            onChangeText={setMaxSalary}
-            keyboardType="numeric"
-          />
+        }
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Text style={styles.backText}>‹ Back</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.heading}>Available Jobs</Text>
+          <Text style={styles.subtitle}>
+            Find opportunities with Nakky Academy
+          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.searchButton}
-          onPress={searchJobs}
-        >
-          <Text style={styles.searchButtonText}>Search Jobs</Text>
-        </TouchableOpacity>
+        <View style={styles.filters}>
+          <Text style={styles.filterLabel}>Type of work</Text>
+          <View style={styles.typeRow}>
+            {[
+              "All Categories",
+              "Nanny",
+              "Caregiver",
+              "Babysitter",
+              "Housekeeper",
+              "Domestic Helper",
+              "Gardener",
+              "Cook",
+              "Driver",
+              "Au Pair",
+              "Disability Care",
+              "Elderly Care",
+            ].map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.typeChip,
+                  jobType === item && styles.filterChipActive,
+                ]}
+                onPress={() => setJobType(item)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    jobType === item && styles.filterChipTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        <TouchableOpacity
-          style={styles.clearButton}
-          onPress={clearFilters}
-        >
-          <Text style={styles.clearButtonText}>Clear Filters</Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.filterLabel}>Province</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {PROVINCES.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.filterChip,
+                  province === item && styles.filterChipActive,
+                ]}
+                onPress={() => setProvince(item)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    province === item && styles.filterChipTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
+          <Text style={styles.filterLabel}>Employment type</Text>
+          <View style={styles.typeRow}>
+            {EMPLOYMENT_TYPES.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.typeChip,
+                  employmentType === item && styles.filterChipActive,
+                ]}
+                onPress={() => setEmploymentType(item)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    employmentType === item && styles.filterChipTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#D41472" />
-          <Text style={styles.muted}>Loading available jobs...</Text>
-        </View>
-      ) : (
-               <FlatList
-          data={filteredJobs}
-          keyExtractor={(item) => item._id}
-          renderItem={renderJob}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadJobs(true, appliedFilters)}
-              tintColor="#D41472"
+          <Text style={styles.filterLabel}>Accommodation arrangement</Text>
+          <View style={styles.typeRow}>
+            {["Any Arrangement", "Live In", "Live Out", "Flexible"].map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.typeChip,
+                  workArrangement === item && styles.filterChipActive,
+                ]}
+                onPress={() => setWorkArrangement(item)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    workArrangement === item && styles.filterChipTextActive,
+                  ]}
+                >
+                  {item === "Flexible" ? "Flexible / Either" : item}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.filterLabel}>Monthly or advertised salary range (R)</Text>
+          <View style={styles.salaryRow}>
+            <TextInput
+              style={[styles.searchInput, styles.salaryInput]}
+              placeholder="Minimum"
+              placeholderTextColor="#888"
+              value={minSalary}
+              onChangeText={setMinSalary}
+              keyboardType="numeric"
             />
-          }
-          ListHeaderComponent={
-            <Text style={styles.resultCount}>
-              {filteredJobs.length} job
-              {filteredJobs.length === 1 ? "" : "s"} found
-            </Text>
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No jobs found</Text>
-              <Text style={styles.muted}>
-                Try changing your search or filters, or pull down to refresh.
-              </Text>
-            </View>
-          }
-        />
+            <TextInput
+              style={[styles.searchInput, styles.salaryInput]}
+              placeholder="Maximum"
+              placeholderTextColor="#888"
+              value={maxSalary}
+              onChangeText={setMaxSalary}
+              keyboardType="numeric"
+            />
+          </View>
 
-      )}
+          <TouchableOpacity style={styles.searchButton} onPress={searchJobs}>
+            <Text style={styles.searchButtonText}>Search Jobs</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+            <Text style={styles.clearButtonText}>Clear Filters</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.resultsContainer}>
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color="#D41472" />
+              <Text style={styles.muted}>Loading available jobs...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.resultCount}>
+                {filteredJobs.length} job{filteredJobs.length === 1 ? "" : "s"} found
+              </Text>
+              {filteredJobs.length > 0 ? (
+                filteredJobs.map((job) => (
+                  <View key={job._id}>{renderJob({ item: job })}</View>
+                ))
+              ) : (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyTitle}>No jobs found</Text>
+                  <Text style={styles.muted}>
+                    Try changing your filters, or pull down to refresh.
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      </ScrollView>
 
       <Modal
         visible={!!selectedJob}
@@ -629,6 +627,14 @@ const clearFilters = () => {
                 {selectedJob.suburb ? `, ${selectedJob.suburb}` : ""}
                 {selectedJob.province ? ` · ${selectedJob.province}` : ""}
               </Text>
+              <Text style={styles.employerLabel}>
+                Posted by {getEmployerLabel(selectedJob)}
+              </Text>
+              {selectedJob.employerProfile && typeof selectedJob.employerProfile !== "string" && selectedJob.employerProfile.employerType ? (
+                <Text style={styles.bodyText}>
+                  Employer type: {selectedJob.employerProfile.employerType}
+                </Text>
+              ) : null}
 
               <Text style={styles.salaryDetails}>
                 {salaryLabel(selectedJob)}
@@ -869,6 +875,9 @@ const clearFilters = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F7F7FA" },
+  screenScroll: { flex: 1 },
+  screenContent: { paddingBottom: 35 },
+  resultsContainer: { paddingHorizontal: 16, paddingTop: 0 },
   header: { backgroundColor: "#171717", padding: 20, paddingTop: 12 },
   backButton: { marginBottom: 12 },
   backText: { color: "#D41472", fontSize: 16, fontWeight: "700" },
@@ -923,6 +932,7 @@ const styles = StyleSheet.create({
   jobTitleContainer: { flex: 1 },
   jobTitle: { fontSize: 18, fontWeight: "800", color: "#202020" },
   location: { color: "#666666", marginTop: 5, fontSize: 13 },
+  employerLabel: { color: "#444444", marginTop: 5, fontSize: 12, fontWeight: "700" },
   arrow: { color: "#D41472", fontSize: 30, marginLeft: 10 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 12 },
   tag: {

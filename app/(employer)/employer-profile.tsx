@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,289 +13,93 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
 import API from "../../src/services/api";
 
-const WORKER_TYPES = [
-  "Caregiver",
-  "Nanny",
-  "Babysitter",
-  "Domestic Helper",
-  "Gardener",
-  "Housekeeper",
-  "Cook",
-  "Driver",
-  "Au Pair",
-  "Disability Care",
-  "Elderly Care",
+const EMPLOYER_TYPES = [
+  "Private Household",
+  "Business",
+  "Agency",
+  "Organisation",
 ];
 
-const EMPLOYMENT_TYPES = [
-  "Full Time",
-  "Part Time",
-  "Live In",
-  "Live Out",
-  "Day Shift",
-  "Night Shift",
-  "Weekends",
-  "Temporary",
+const PROVINCES = [
+  "Eastern Cape",
+  "Free State",
+  "Gauteng",
+  "KwaZulu-Natal",
+  "Limpopo",
+  "Mpumalanga",
+  "Northern Cape",
+  "North West",
+  "Western Cape",
 ];
 
-const GENDERS = ["Any", "Male", "Female"];
+type EmployerProfileData = {
+  contactPerson?: string;
+  employerType?: string;
+  householdName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  province?: string;
+  city?: string;
+  suburb?: string;
+};
 
-export default function EmployerProfile() {
+export default function EmployerProfileScreen() {
   const router = useRouter();
-
-  const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
-
-  // ==========================================
-  // PROFILE STATUS
-  // ==========================================
-
+  const [saving, setSaving] = useState(false);
   const [profileExists, setProfileExists] = useState(false);
 
-  // ==========================================
-  // EMPLOYER DETAILS
-  // ==========================================
-
   const [contactPerson, setContactPerson] = useState("");
-  const [employerType, setEmployerType] =
-    useState("Private Household");
+  const [employerType, setEmployerType] = useState("Private Household");
   const [householdName, setHouseholdName] = useState("");
-
-  // ==========================================
-  // LOCATION
-  // ==========================================
-
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [province, setProvince] = useState("");
   const [city, setCity] = useState("");
   const [suburb, setSuburb] = useState("");
-
-  // ==========================================
-  // SEARCH PREFERENCES
-  // ==========================================
-
-  const [lookingFor, setLookingFor] = useState<string[]>([]);
-  const [employmentTypes, setEmploymentTypes] =
-    useState<string[]>([]);
-
-  const [preferredGender, setPreferredGender] =
-    useState("Any");
-
-  const [preferredAgeMin, setPreferredAgeMin] =
-    useState("18");
-
-  const [preferredAgeMax, setPreferredAgeMax] =
-    useState("65");
-
-  const [preferredExperience, setPreferredExperience] =
-    useState("0");
-
-  const [preferredNationalities, setPreferredNationalities] =
-    useState("");
-
-  const [preferredLanguages, setPreferredLanguages] =
-    useState("");
-
-  const [salaryOffered, setSalaryOffered] =
-    useState("");
-
-  // ==========================================
-  // LOAD EXISTING EMPLOYER PROFILE
-  // ==========================================
 
   useEffect(() => {
     loadEmployerProfile();
   }, []);
 
+  const ensureAuth = async () => {
+    const token = await AsyncStorage.getItem("token");
+    if (!token) {
+      Alert.alert("Session expired", "Please log in again.");
+      router.replace("/login");
+      return false;
+    }
+    API.defaults.headers.common.Authorization = `Bearer ${token}`;
+    return true;
+  };
+
   const loadEmployerProfile = async () => {
     try {
-      setLoadingProfile(true);
-
-      const token =
-        await AsyncStorage.getItem("token");
-
-      if (!token) {
-        Alert.alert(
-          "Session Expired",
-          "Please log in again."
-        );
-        return;
-      }
-
-      API.defaults.headers.common[
-        "Authorization"
-      ] = `Bearer ${token}`;
-
-      console.log(
-        "LOADING EMPLOYER PROFILE..."
-      );
-
-      const response = await API.get(
-        "/profiles/employer"
-      );
-
-      const profile = response.data;
-
-      console.log(
-        "EMPLOYER PROFILE LOADED:",
-        profile
-      );
-
-      if (!profile) {
+      if (!(await ensureAuth())) return;
+      const response = await API.get("/profiles/employer");
+      const profile: EmployerProfileData = response.data?.profile || response.data;
+      if (!profile || typeof profile !== "object") {
         setProfileExists(false);
         return;
       }
-
-      // ==========================================
-      // PROFILE EXISTS
-      // ==========================================
-
       setProfileExists(true);
-
-      // ==========================================
-      // EMPLOYER DETAILS
-      // ==========================================
-
-      setContactPerson(
-        profile.contactPerson || ""
-      );
-
-      setEmployerType(
-        profile.employerType ||
-          "Private Household"
-      );
-
-      setHouseholdName(
-        profile.householdName || ""
-      );
-
-      // ==========================================
-      // LOCATION
-      // ==========================================
-
-      setProvince(
-        profile.province || ""
-      );
-
-      setCity(
-        profile.city || ""
-      );
-
-      setSuburb(
-        profile.suburb || ""
-      );
-
-      // ==========================================
-      // LOOKING FOR
-      // ==========================================
-
-      setLookingFor(
-        Array.isArray(profile.lookingFor)
-          ? profile.lookingFor
-          : []
-      );
-
-      // ==========================================
-      // EMPLOYMENT TYPES
-      // ==========================================
-
-      setEmploymentTypes(
-        Array.isArray(profile.employmentTypes)
-          ? profile.employmentTypes
-          : []
-      );
-
-      // ==========================================
-      // PREFERRED GENDER
-      // ==========================================
-
-      setPreferredGender(
-        profile.preferredGender || "Any"
-      );
-
-      // ==========================================
-      // AGE
-      // ==========================================
-
-      setPreferredAgeMin(
-        String(
-          profile.preferredAgeMin ?? 18
-        )
-      );
-
-      setPreferredAgeMax(
-        String(
-          profile.preferredAgeMax ?? 65
-        )
-      );
-
-      // ==========================================
-      // EXPERIENCE
-      // ==========================================
-
-      setPreferredExperience(
-        String(
-          profile.preferredExperience ?? 0
-        )
-      );
-
-      // ==========================================
-      // NATIONALITIES
-      // ==========================================
-
-      setPreferredNationalities(
-        Array.isArray(
-          profile.preferredNationalities
-        )
-          ? profile.preferredNationalities.join(
-              ", "
-            )
-          : ""
-      );
-
-      // ==========================================
-      // LANGUAGES
-      // ==========================================
-
-      setPreferredLanguages(
-        Array.isArray(
-          profile.preferredLanguages
-        )
-          ? profile.preferredLanguages.join(
-              ", "
-            )
-          : ""
-      );
-
-      // ==========================================
-      // SALARY
-      // ==========================================
-
-      setSalaryOffered(
-        String(
-          profile.salaryOffered ?? 0
-        )
-      );
-    } catch (err: any) {
-      console.log(
-        "EMPLOYER PROFILE LOAD ERROR:",
-        err?.response?.data ||
-          err.message
-      );
-
-      // A 404 means this employer does not
-      // currently have a profile.
-      if (
-        err?.response?.status === 404
-      ) {
+      setContactPerson(profile.contactPerson || "");
+      setEmployerType(profile.employerType || "Private Household");
+      setHouseholdName(profile.householdName || "");
+      setContactPhone(profile.contactPhone || "");
+      setContactEmail(profile.contactEmail || "");
+      setProvince(profile.province || "");
+      setCity(profile.city || "");
+      setSuburb(profile.suburb || "");
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
         setProfileExists(false);
       } else {
         Alert.alert(
-          "Profile Error",
-          err?.response?.data?.message ||
-            "Unable to load your employer profile."
+          "Unable to load profile",
+          error?.response?.data?.message || error?.response?.data?.error || "Please try again."
         );
       }
     } finally {
@@ -301,842 +107,206 @@ export default function EmployerProfile() {
     }
   };
 
-  // ==========================================
-  // TOGGLE WORKER TYPE
-  // ==========================================
-
-  const toggleWorkerType = (
-    type: string
-  ) => {
-    setLookingFor((current) =>
-      current.includes(type)
-        ? current.filter(
-            (item) => item !== type
-          )
-        : [...current, type]
-    );
-  };
-
-  // ==========================================
-  // TOGGLE EMPLOYMENT TYPE
-  // ==========================================
-
-  const toggleEmploymentType = (
-    type: string
-  ) => {
-    setEmploymentTypes((current) =>
-      current.includes(type)
-        ? current.filter(
-            (item) => item !== type
-          )
-        : [...current, type]
-    );
-  };
-
-  // ==========================================
-  // SAVE / UPDATE PROFILE
-  // ==========================================
-
   const saveProfile = async () => {
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
-    if (!contactPerson.trim()) {
-      Alert.alert(
-        "Required",
-        "Please enter the name of the contact person."
-      );
+    if (!contactPerson.trim() || !province.trim() || !city.trim()) {
+      Alert.alert("Missing information", "Enter the contact person's name, province and city.");
       return;
     }
-
-    if (!province.trim()) {
-      Alert.alert(
-        "Required",
-        "Please enter your province."
-      );
+    if (contactEmail.trim() && !/^\S+@\S+\.\S+$/.test(contactEmail.trim())) {
+      Alert.alert("Invalid email", "Enter a valid contact email address.");
       return;
     }
-
-    if (!city.trim()) {
-      Alert.alert(
-        "Required",
-        "Please enter your city."
-      );
-      return;
-    }
-
-    if (lookingFor.length === 0) {
-      Alert.alert(
-        "Required",
-        "Please select at least one type of candidate you are looking for."
-      );
+    if (contactPhone.trim() && contactPhone.trim().replace(/\D/g, "").length < 9) {
+      Alert.alert("Invalid phone number", "Enter a valid contact phone number.");
       return;
     }
 
     try {
-      setLoading(true);
-
-      const token =
-        await AsyncStorage.getItem("token");
-
-      if (!token) {
-        Alert.alert(
-          "Session Expired",
-          "Please log in again."
-        );
-        return;
-      }
-
-      API.defaults.headers.common[
-        "Authorization"
-      ] = `Bearer ${token}`;
-
-      // ==========================================
-      // BUILD PAYLOAD
-      // ==========================================
-
+      setSaving(true);
+      if (!(await ensureAuth())) return;
       const payload = {
-        contactPerson:
-          contactPerson.trim(),
-
+        contactPerson: contactPerson.trim(),
         employerType,
-
-        householdName:
-          householdName.trim(),
-
-        province:
-          province.trim(),
-
-        city:
-          city.trim(),
-
-        suburb:
-          suburb.trim(),
-
-        lookingFor,
-
-        employmentTypes,
-
-        preferredGender,
-
-        preferredAgeMin:
-          Number(preferredAgeMin) || 18,
-
-        preferredAgeMax:
-          Number(preferredAgeMax) || 65,
-
-        preferredExperience:
-          Number(preferredExperience) || 0,
-
-        preferredNationalities:
-          preferredNationalities
-            .split(",")
-            .map((item) =>
-              item.trim()
-            )
-            .filter(Boolean),
-
-        preferredLanguages:
-          preferredLanguages
-            .split(",")
-            .map((item) =>
-              item.trim()
-            )
-            .filter(Boolean),
-
-        salaryOffered:
-          Number(salaryOffered) || 0,
+        householdName: householdName.trim(),
+        contactPhone: contactPhone.trim(),
+        contactEmail: contactEmail.trim().toLowerCase(),
+        province: province.trim(),
+        city: city.trim(),
+        suburb: suburb.trim(),
       };
-
-      console.log(
-        "EMPLOYER PROFILE PAYLOAD:",
-        payload
-      );
-
-      // ==========================================
-      // UPDATE EXISTING PROFILE
-      // OR CREATE IF NONE EXISTS
-      // ==========================================
-
-      let response;
-
       if (profileExists) {
-        console.log(
-          "UPDATING EXISTING EMPLOYER PROFILE..."
-        );
-
-        response = await API.put(
-          "/profiles/employer",
-          payload
-        );
-
-        console.log(
-          "EMPLOYER PROFILE UPDATED:",
-          response.data
-        );
+        await API.put("/profiles/employer", payload);
       } else {
-        console.log(
-          "CREATING NEW EMPLOYER PROFILE..."
-        );
-
-        response = await API.post(
-          "/profiles/employer",
-          payload
-        );
-
-        console.log(
-          "EMPLOYER PROFILE CREATED:",
-          response.data
-        );
-
-        // The profile now exists.
+        await API.post("/profiles/employer", payload);
         setProfileExists(true);
       }
-
-      // ==========================================
-      // SUCCESS
-      // ==========================================
-
+      Alert.alert("Profile saved", "Your employer profile has been updated.");
+    } catch (error: any) {
       Alert.alert(
-        profileExists
-          ? "Profile Updated"
-          : "Profile Created",
-        profileExists
-          ? "Your employer profile has been updated successfully."
-          : "Your employer profile has been created successfully.",
-        [
-          {
-            text: "Continue",
-            onPress: () =>
-              router.replace(
-                "/(employer)/employer-dashboard"
-              ),
-          },
-        ]
-      );
-    } catch (err: any) {
-      console.log(
-        "SAVE EMPLOYER PROFILE ERROR:",
-        err?.response?.data ||
-          err.message
-      );
-
-      Alert.alert(
-        "Profile Error",
-        err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          "Unable to save your employer profile."
+        "Unable to save profile",
+        error?.response?.data?.message || error?.response?.data?.error || "Please check your details and try again."
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  // ==========================================
-  // LOADING PROFILE
-  // ==========================================
-
   if (loadingProfile) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator
-          size="large"
-          color="#2E7D32"
-        />
-
-        <Text style={styles.loadingText}>
-          Loading your employer profile...
-        </Text>
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#D41472" />
+        <Text style={styles.muted}>Loading employer profile...</Text>
       </View>
     );
   }
 
-  // ==========================================
-  // MAIN UI
-  // ==========================================
-
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ========================================== */}
-      {/* HEADER */}
-      {/* ========================================== */}
-
-      <Text style={styles.heading}>
-        {profileExists
-          ? "Employer Profile"
-          : "Create Employer Profile"}
-      </Text>
-
-      <Text style={styles.subtitle}>
-        {profileExists
-          ? "Update your information and candidate preferences."
-          : "Tell us about yourself and the type of candidate you are looking for."}
-      </Text>
-
-      {/* ========================================== */}
-      {/* EMPLOYER DETAILS */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Employer Details
-      </Text>
-
-      <Text style={styles.label}>
-        Contact Person *
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Your full name"
-        placeholderTextColor="#888888"
-        value={contactPerson}
-        onChangeText={setContactPerson}
-      />
-
-      <Text style={styles.label}>
-        Employer Type
-      </Text>
-
-      <View style={styles.optionContainer}>
-        {[
-          "Private Household",
-          "Business",
-          "Agency",
-          "Organisation",
-        ].map((type) => (
-          <TouchableOpacity
-            key={type}
-            style={[
-              styles.option,
-              employerType === type &&
-                styles.optionSelected,
-            ]}
-            onPress={() =>
-              setEmployerType(type)
-            }
-          >
-            <Text
-              style={[
-                styles.optionText,
-                employerType === type &&
-                  styles.optionTextSelected,
-              ]}
-            >
-              {type}
-            </Text>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.label}>
-        Household / Business Name
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Optional"
-        placeholderTextColor="#888888"
-        value={householdName}
-        onChangeText={setHouseholdName}
-      />
-
-      {/* ========================================== */}
-      {/* LOCATION */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Location
-      </Text>
-
-      <Text style={styles.label}>
-        Province *
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Gauteng"
-        placeholderTextColor="#888888"
-        value={province}
-        onChangeText={setProvince}
-      />
-
-      <Text style={styles.label}>
-        City *
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Johannesburg"
-        placeholderTextColor="#888888"
-        value={city}
-        onChangeText={setCity}
-      />
-
-      <Text style={styles.label}>
-        Suburb
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Optional"
-        placeholderTextColor="#888888"
-        value={suburb}
-        onChangeText={setSuburb}
-      />
-
-      {/* ========================================== */}
-      {/* LOOKING FOR */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Who Are You Looking For?
-      </Text>
-
-      <Text style={styles.helperText}>
-        Select one or more candidate types.
-      </Text>
-
-      <View style={styles.checkboxContainer}>
-        {WORKER_TYPES.map((type) => {
-          const selected =
-            lookingFor.includes(type);
-
-          return (
-            <TouchableOpacity
-              key={type}
-              style={styles.checkboxRow}
-              onPress={() =>
-                toggleWorkerType(type)
-              }
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  selected &&
-                    styles.checkboxSelected,
-                ]}
-              >
-                {selected && (
-                  <Text style={styles.checkmark}>
-                    ✓
-                  </Text>
-                )}
-              </View>
-
-              <Text style={styles.checkboxText}>
-                {type}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ========================================== */}
-      {/* EMPLOYMENT TYPE */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Employment Type
-      </Text>
-
-      <Text style={styles.helperText}>
-        Select all that apply.
-      </Text>
-
-      <View style={styles.checkboxContainer}>
-        {EMPLOYMENT_TYPES.map((type) => {
-          const selected =
-            employmentTypes.includes(type);
-
-          return (
-            <TouchableOpacity
-              key={type}
-              style={styles.checkboxRow}
-              onPress={() =>
-                toggleEmploymentType(type)
-              }
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  selected &&
-                    styles.checkboxSelected,
-                ]}
-              >
-                {selected && (
-                  <Text style={styles.checkmark}>
-                    ✓
-                  </Text>
-                )}
-              </View>
-
-              <Text style={styles.checkboxText}>
-                {type}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ========================================== */}
-      {/* PREFERRED GENDER */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Preferred Gender
-      </Text>
-
-      <View style={styles.optionContainer}>
-        {GENDERS.map((gender) => (
-          <TouchableOpacity
-            key={gender}
-            style={[
-              styles.option,
-              preferredGender === gender &&
-                styles.optionSelected,
-            ]}
-            onPress={() =>
-              setPreferredGender(gender)
-            }
-          >
-            <Text
-              style={[
-                styles.optionText,
-                preferredGender === gender &&
-                  styles.optionTextSelected,
-              ]}
-            >
-              {gender}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ========================================== */}
-      {/* AGE */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Preferred Candidate Age
-      </Text>
-
-      <View style={styles.row}>
-        <View style={styles.halfInput}>
-          <Text style={styles.label}>
-            Minimum Age
-          </Text>
-
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            value={preferredAgeMin}
-            onChangeText={
-              setPreferredAgeMin
-            }
-          />
+          <Text style={styles.eyebrow}>NAKKY ACADEMY</Text>
+          <Text style={styles.title}>Employer Profile</Text>
+          <Text style={styles.subtitle}>Set up your identity and contact information for the marketplace.</Text>
         </View>
 
-        <View style={styles.halfInput}>
-          <Text style={styles.label}>
-            Maximum Age
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>Your profile is separate from your job posts</Text>
+          <Text style={styles.infoText}>
+            Keep your contact and general location here. Add salary, duties, working hours and vacancy requirements when you create each job post.
           </Text>
+        </View>
 
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Employer details</Text>
+          <Text style={styles.label}>Contact person's full name *</Text>
           <TextInput
             style={styles.input}
-            keyboardType="numeric"
-            value={preferredAgeMax}
-            onChangeText={
-              setPreferredAgeMax
-            }
+            placeholder="Full name"
+            placeholderTextColor="#888"
+            value={contactPerson}
+            onChangeText={setContactPerson}
+            autoCapitalize="words"
           />
-        </View>
-      </View>
 
-      {/* ========================================== */}
-      {/* EXPERIENCE */}
-      {/* ========================================== */}
+          <Text style={styles.label}>Employer type *</Text>
+          <View style={styles.chipRow}>
+            {EMPLOYER_TYPES.map((item) => (
+              <TouchableOpacity
+                key={item}
+                onPress={() => setEmployerType(item)}
+                style={[styles.chip, employerType === item && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, employerType === item && styles.chipTextActive]}>{item}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <Text style={styles.sectionTitle}>
-        Minimum Experience
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        placeholder="Years of experience"
-        placeholderTextColor="#888888"
-        value={preferredExperience}
-        onChangeText={
-          setPreferredExperience
-        }
-      />
-
-      {/* ========================================== */}
-      {/* NATIONALITY */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Preferred Nationalities
-      </Text>
-
-      <Text style={styles.helperText}>
-        Separate multiple nationalities with commas.
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. South African, Zimbabwean"
-        placeholderTextColor="#888888"
-        value={preferredNationalities}
-        onChangeText={
-          setPreferredNationalities
-        }
-      />
-
-      {/* ========================================== */}
-      {/* LANGUAGES */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Preferred Languages
-      </Text>
-
-      <Text style={styles.helperText}>
-        Separate multiple languages with commas.
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. English, Zulu, Sotho"
-        placeholderTextColor="#888888"
-        value={preferredLanguages}
-        onChangeText={
-          setPreferredLanguages
-        }
-      />
-
-      {/* ========================================== */}
-      {/* SALARY */}
-      {/* ========================================== */}
-
-      <Text style={styles.sectionTitle}>
-        Salary Offered
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        placeholder="Monthly salary in Rands"
-        placeholderTextColor="#888888"
-        value={salaryOffered}
-        onChangeText={setSalaryOffered}
-      />
-
-      {/* ========================================== */}
-      {/* SAVE / UPDATE BUTTON */}
-      {/* ========================================== */}
-
-      <TouchableOpacity
-        style={[
-          styles.createButton,
-          loading &&
-            styles.buttonDisabled,
-        ]}
-        onPress={saveProfile}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator
-            color="#FFFFFF"
+          <Text style={styles.label}>Household or organisation name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Optional"
+            placeholderTextColor="#888"
+            value={householdName}
+            onChangeText={setHouseholdName}
           />
-        ) : (
-          <Text
-            style={styles.createButtonText}
-          >
-            {profileExists
-              ? "Save / Update Profile"
-              : "Create Employer Profile"}
+
+          <Text style={styles.sectionTitle}>Contact details</Text>
+          <Text style={styles.label}>Contact phone number *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 082 123 4567"
+            placeholderTextColor="#888"
+            value={contactPhone}
+            onChangeText={setContactPhone}
+            keyboardType="phone-pad"
+          />
+          <Text style={styles.label}>Contact email address *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="name@example.co.za"
+            placeholderTextColor="#888"
+            value={contactEmail}
+            onChangeText={setContactEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Text style={styles.privateNote}>
+            Contact details are intended for authorised marketplace contact and must be protected by the backend subscription checks.
           </Text>
-        )}
-      </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+          <Text style={styles.sectionTitle}>General location</Text>
+          <Text style={styles.label}>Province *</Text>
+          <View style={styles.chipRow}>
+            {PROVINCES.map((item) => (
+              <TouchableOpacity
+                key={item}
+                onPress={() => setProvince(item)}
+                style={[styles.chip, province === item && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, province === item && styles.chipTextActive]}>{item}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.label}>City or town *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Johannesburg"
+            placeholderTextColor="#888"
+            value={city}
+            onChangeText={setCity}
+            autoCapitalize="words"
+          />
+          <Text style={styles.label}>Suburb or area</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Optional"
+            placeholderTextColor="#888"
+            value={suburb}
+            onChangeText={setSuburb}
+            autoCapitalize="words"
+          />
+
+          <TouchableOpacity style={[styles.saveButton, saving && styles.disabled]} onPress={saveProfile} disabled={saving}>
+            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>{profileExists ? "Save Changes" : "Create Employer Profile"}</Text>}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F7FA",
-  },
-
-  content: {
-    padding: 20,
-  },
-
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#F5F7FA",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#666",
-  },
-
-  heading: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#2E7D32",
-    marginBottom: 8,
-  },
-
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
-    lineHeight: 23,
-    marginBottom: 25,
-  },
-
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#222",
-    marginTop: 20,
-    marginBottom: 12,
-  },
-
-  label: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#444",
-    marginBottom: 7,
-  },
-
-  helperText: {
-    fontSize: 14,
-    color: "#777",
-    marginBottom: 12,
-  },
-
-  input: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DDD",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#222222",
-    marginBottom: 15,
-  },
-
-  optionContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 5,
-  },
-
-  option: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DDD",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 8,
-    marginBottom: 10,
-  },
-
-  optionSelected: {
-    backgroundColor: "#2E7D32",
-    borderColor: "#2E7D32",
-  },
-
-  optionText: {
-    color: "#444",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  optionTextSelected: {
-    color: "#FFFFFF",
-  },
-
-  checkboxContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 5,
-  },
-
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#CCC",
-    borderRadius: 6,
-    marginRight: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  checkboxSelected: {
-    backgroundColor: "#2E7D32",
-    borderColor: "#2E7D32",
-  },
-
-  checkmark: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-
-  checkboxText: {
-    fontSize: 16,
-    color: "#333",
-  },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  halfInput: {
-    width: "48%",
-  },
-
-  createButton: {
-    backgroundColor: "#2E7D32",
-    borderRadius: 14,
-    paddingVertical: 17,
-    alignItems: "center",
-    marginTop: 30,
-    elevation: 3,
-  },
-
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-
-  createButtonText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "bold",
-  },
+  container: { flex: 1, backgroundColor: "#F7F7FA" },
+  content: { paddingBottom: 32 },
+  loadingScreen: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: "#F7F7FA" },
+  header: { backgroundColor: "#171717", padding: 20, paddingTop: 12, paddingBottom: 24 },
+  backButton: { marginBottom: 16 },
+  backText: { color: "#D41472", fontSize: 16, fontWeight: "800" },
+  eyebrow: { color: "#FFD84D", fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
+  title: { color: "#FFFFFF", fontSize: 27, fontWeight: "900", marginTop: 7 },
+  subtitle: { color: "#E5E5E5", fontSize: 14, lineHeight: 21, marginTop: 8 },
+  infoCard: { margin: 16, marginBottom: 0, padding: 15, backgroundColor: "#FCE8F2", borderRadius: 13, borderWidth: 1, borderColor: "#F4C3DA" },
+  infoTitle: { color: "#8D104E", fontSize: 14, fontWeight: "900" },
+  infoText: { color: "#5E3A4B", fontSize: 13, lineHeight: 20, marginTop: 6 },
+  formCard: { backgroundColor: "#FFFFFF", borderRadius: 16, margin: 16, padding: 18, borderWidth: 1, borderColor: "#ECECF0" },
+  sectionTitle: { color: "#202020", fontSize: 17, fontWeight: "900", marginTop: 8, marginBottom: 7 },
+  label: { color: "#333333", fontSize: 13, fontWeight: "800", marginTop: 14, marginBottom: 7 },
+  input: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#DDDDDD", borderRadius: 11, paddingHorizontal: 13, paddingVertical: 12, color: "#222222", fontSize: 14 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  chip: { borderWidth: 1, borderColor: "#DDDDDD", borderRadius: 20, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: "#FFFFFF" },
+  chipActive: { backgroundColor: "#D41472", borderColor: "#D41472" },
+  chipText: { color: "#444444", fontSize: 12, fontWeight: "700" },
+  chipTextActive: { color: "#FFFFFF" },
+  privateNote: { color: "#777777", fontSize: 12, lineHeight: 18, marginTop: 8 },
+  saveButton: { backgroundColor: "#D41472", borderRadius: 12, padding: 15, alignItems: "center", marginTop: 25 },
+  saveButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  disabled: { opacity: 0.6 },
+  muted: { color: "#777777", fontSize: 13 },
 });

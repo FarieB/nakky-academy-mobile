@@ -212,6 +212,10 @@ export default function CandidateDashboard() {
     router.push("/(candidate)/marketplace");
   };
 
+  const openRecommendations = () => {
+    router.push("/(candidate)/recommendations");
+  };
+
   const openProfile = () => {
     router.push("/(candidate)/profile-builder");
   };
@@ -481,7 +485,7 @@ export default function CandidateDashboard() {
 
             <TouchableOpacity
               style={styles.actionCard}
-              onPress={openMarketplace}
+              onPress={openRecommendations}
             >
               <Text style={styles.actionIcon}>⭐</Text>
 
