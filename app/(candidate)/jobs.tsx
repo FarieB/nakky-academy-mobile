@@ -22,6 +22,7 @@ type EmployerDisplay = {
   province?: string;
   city?: string;
   suburb?: string;
+  _id?: string;
 };
 
 type Job = {
@@ -98,7 +99,9 @@ export default function CandidateJobsScreen() {
 
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  
+  const [employerContact, setEmployerContact] = useState<{ contactPerson?: string; householdName?: string; phone?: string; email?: string } | null>(null);
+  const [employerContactLoading, setEmployerContactLoading] = useState(false);
+  const [employerContactMessage, setEmployerContactMessage] = useState("");
 
   const [interviewVisible, setInterviewVisible] = useState(false);
   const [interviewDate, setInterviewDate] = useState("");
@@ -149,6 +152,35 @@ export default function CandidateJobsScreen() {
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
+
+  // Fetch protected employer contact details when a candidate opens a job.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchContact = async () => {
+      setEmployerContact(null);
+      setEmployerContactMessage("");
+      if (!selectedJob) return;
+      const profile = selectedJob.employerProfile;
+      const employerProfileId = profile && typeof profile !== "string" ? profile._id : undefined;
+      if (!employerProfileId) {
+        setEmployerContactMessage("Employer contact details are unavailable for this job.");
+        return;
+      }
+      try {
+        setEmployerContactLoading(true);
+        const response = await API.get(`/profiles/employer/${employerProfileId}/contact`);
+        if (!cancelled) setEmployerContact(response.data?.contact || null);
+      } catch (error: any) {
+        if (!cancelled) {
+          setEmployerContactMessage(error?.response?.data?.message || "An active candidate subscription and active employer account/profile/subscription are required to view contact details.");
+        }
+      } finally {
+        if (!cancelled) setEmployerContactLoading(false);
+      }
+    };
+    fetchContact();
+    return () => { cancelled = true; };
+  }, [selectedJob]);
 
   // Filtering is done server-side now.
   const filteredJobs = jobs;
@@ -630,6 +662,20 @@ const clearFilters = () => {
               <Text style={styles.employerLabel}>
                 Posted by {getEmployerLabel(selectedJob)}
               </Text>
+              <View style={styles.contactPanel}>
+                <Text style={styles.sectionTitle}>Employer contact details</Text>
+                {employerContactLoading ? (
+                  <ActivityIndicator color="#D41472" />
+                ) : employerContact ? (
+                  <>
+                    {!!(employerContact.contactPerson || employerContact.householdName) && <Text style={styles.bodyText}>Contact: {employerContact.contactPerson || employerContact.householdName}</Text>}
+                    <Text style={styles.bodyText}>Phone: {employerContact.phone || "Not provided"}</Text>
+                    <Text style={styles.bodyText}>Email: {employerContact.email || "Not provided"}</Text>
+                  </>
+                ) : (
+                  <Text style={styles.muted}>{employerContactMessage || "Contact details are protected and may require an active subscription."}</Text>
+                )}
+              </View>
               {selectedJob.employerProfile && typeof selectedJob.employerProfile !== "string" && selectedJob.employerProfile.employerType ? (
                 <Text style={styles.bodyText}>
                   Employer type: {selectedJob.employerProfile.employerType}
@@ -959,6 +1005,7 @@ const styles = StyleSheet.create({
   muted: { color: "#777777", fontSize: 13, lineHeight: 19 },
   empty: { alignItems: "center", padding: 30, gap: 8 },
   emptyTitle: { fontSize: 19, fontWeight: "800", color: "#222222" },
+  contactPanel: { backgroundColor: "#FFF5FA", borderWidth: 1, borderColor: "#F3C5DA", borderRadius: 12, padding: 12, marginTop: 12, marginBottom: 8 },
   modalContainer: { flex: 1, backgroundColor: "#FFFFFF" },
   modalHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: "#EEEEEE" },
   detailsContent: { padding: 20, paddingBottom: 40 },

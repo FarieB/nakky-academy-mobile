@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,7 @@ const EMPLOYMENT_TYPES = ["Full Time", "Part Time", "Temporary"];
 const ARRANGEMENTS = ["Live In", "Live Out", "Flexible"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SALARY_TYPES = ["Monthly", "Weekly", "Daily", "Hourly", "Negotiable"];
-const CARE_TYPES = ["None", "Childcare", "Elderly Care", "Disability Care", "Post Surgery Care", "Palliative Care", "Other"];
+const CARE_TYPES = ["None", "Baby Care", "Child Care", "Elderly Care", "Disability Care", "Post Surgery Care", "Palliative Care", "Hospice Care", "General Care", "Other"];
 
 type Job = {
   _id: string;
@@ -41,6 +41,27 @@ type Job = {
   salaryMax?: number;
   status?: string;
   createdAt?: string;
+};
+
+type CandidateMatch = {
+  candidate: {
+    _id: string;
+    firstName?: string;
+    surname?: string;
+    profilePhoto?: string;
+    workerTypes?: string[];
+    city?: string;
+    province?: string;
+    yearsExperience?: number;
+    expectedSalary?: number;
+    languages?: string[];
+    skills?: string[];
+    user?: { name?: string; profilePhoto?: string; verifiedBadge?: boolean } | string;
+  };
+  matchScore: number;
+  matchPercentage?: number;
+  matchReasons?: string[];
+  matchedJob?: { _id: string; title?: string } | null;
 };
 
 const toggleValue = (values: string[], value: string) =>
@@ -76,6 +97,9 @@ export default function EmployerJobPostsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [matchesByJob, setMatchesByJob] = useState<Record<string, CandidateMatch[]>>({});
+  const [loadingMatchesFor, setLoadingMatchesFor] = useState<string | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [jobTypes, setJobTypes] = useState<string[]>([]);
@@ -172,6 +196,7 @@ export default function EmployerJobPostsScreen() {
       salaryNegotiable: salaryType === "Negotiable",
       requiredLanguages: splitComma(requiredLanguages),
       requiredExperience: experience,
+      // The JobPost schema supports "Other" after the enum is updated below.
       careType,
       careRequirements: careRequirements.trim(),
       childrenDetails: childrenDetails.trim(),
@@ -194,6 +219,36 @@ export default function EmployerJobPostsScreen() {
       Alert.alert("Unable to publish job", error?.response?.data?.message || "Please check your employer profile and try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const loadMatchesForJob = async (job: Job) => {
+    if (expandedJobId === job._id) {
+      setExpandedJobId(null);
+      return;
+    }
+
+    setExpandedJobId(job._id);
+    if (matchesByJob[job._id]) return;
+
+    try {
+      setLoadingMatchesFor(job._id);
+      const response = await API.get("/recommendations/candidates", {
+        params: { jobId: job._id, limit: 5, page: 1 },
+      });
+      const matches = Array.isArray(response.data?.candidates)
+        ? response.data.candidates
+        : Array.isArray(response.data)
+          ? response.data
+          : [];
+      setMatchesByJob((current) => ({ ...current, [job._id]: matches }));
+    } catch (error: any) {
+      Alert.alert(
+        "Unable to load matching candidates",
+        error?.response?.data?.message || "Please try again."
+      );
+    } finally {
+      setLoadingMatchesFor(null);
     }
   };
 
@@ -297,6 +352,39 @@ export default function EmployerJobPostsScreen() {
                 <Text style={styles.jobMeta}>{job.employmentType || "Employment type not set"} · {job.workArrangement || "Arrangement not set"}</Text>
                 <Text style={styles.jobSalary}>{job.salaryAmount ? `R${Number(job.salaryAmount).toLocaleString("en-ZA")}` : job.salaryMin || job.salaryMax ? `${job.salaryMin ? `R${Number(job.salaryMin).toLocaleString("en-ZA")}` : ""}${job.salaryMin && job.salaryMax ? " – " : ""}${job.salaryMax ? `R${Number(job.salaryMax).toLocaleString("en-ZA")}` : ""}` : "Salary not specified"}</Text>
                 <Text style={styles.status}>Status: {job.status || "unknown"}</Text>
+                <TouchableOpacity style={styles.matchButton} onPress={() => loadMatchesForJob(job)}>
+                  <Text style={styles.matchButtonText}>
+                    {expandedJobId === job._id ? "Hide matching candidates" : "View matching candidates"}
+                  </Text>
+                </TouchableOpacity>
+                {expandedJobId === job._id ? (
+                  <View style={styles.matchesPanel}>
+                    <Text style={styles.matchesHeading}>Potential matches for this vacancy</Text>
+                    {loadingMatchesFor === job._id ? (
+                      <ActivityIndicator color="#D41472" />
+                    ) : (matchesByJob[job._id] || []).length ? (
+                      (matchesByJob[job._id] || []).map((match) => {
+                        const candidate = match.candidate || (match as any);
+                        const name = [candidate.firstName, candidate.surname].filter(Boolean).join(" ") || (typeof candidate.user === "object" ? candidate.user?.name : "") || "Candidate";
+                        return (
+                          <View key={candidate._id} style={styles.matchCard}>
+                            <Text style={styles.matchName}>{name}</Text>
+                            <Text style={styles.matchMeta}>{(candidate.workerTypes || []).join(", ") || "Work type not specified"}</Text>
+                            <Text style={styles.matchMeta}>{[candidate.city, candidate.province].filter(Boolean).join(", ") || "Location not specified"}</Text>
+                            <Text style={styles.matchMeta}>{Number(candidate.yearsExperience || 0)} years experience · Match score {match.matchPercentage ?? match.matchScore ?? 0}%</Text>
+                            {(match.matchReasons || []).slice(0, 2).map((reason, index) => <Text key={`${candidate._id}-reason-${index}`} style={styles.matchReason}>• {reason}</Text>)}
+                            <TouchableOpacity style={styles.viewCandidateButton} onPress={() => router.push({ pathname: "/(employer)/candidate-details", params: { id: candidate._id } })}>
+                              <Text style={styles.viewCandidateButtonText}>View candidate profile</Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.emptyText}>No matches found yet. Candidates with active profiles are ranked by work type, location, preferences, languages, experience and salary fit.</Text>
+                    )}
+                  </View>
+                ) : null}
+                <Text style={styles.status}>Status: {job.status || "unknown"}</Text>
                 {job.status === "active" ? (
                   <TouchableOpacity style={styles.outlineButton} onPress={() => changeJobStatus(job, "pause")}><Text style={styles.outlineButtonText}>Pause Job</Text></TouchableOpacity>
                 ) : ["paused", "draft"].includes(String(job.status)) ? (
@@ -346,6 +434,16 @@ const styles = StyleSheet.create({
   jobMeta: { color: "#555555", fontSize: 12, marginTop: 7 },
   jobSalary: { color: "#16804A", fontSize: 14, fontWeight: "900", marginTop: 8 },
   status: { color: "#777777", fontSize: 12, marginTop: 8 },
+  matchButton: { backgroundColor: "#FCE7F3", borderRadius: 10, padding: 11, alignItems: "center", marginTop: 10, borderWidth: 1, borderColor: "#F3B5D2" },
+  matchButtonText: { color: "#A50D58", fontSize: 13, fontWeight: "900" },
+  matchesPanel: { backgroundColor: "#FAFAFC", borderRadius: 12, borderWidth: 1, borderColor: "#E9E9EF", padding: 12, marginTop: 10 },
+  matchesHeading: { color: "#222222", fontSize: 14, fontWeight: "900", marginBottom: 8 },
+  matchCard: { backgroundColor: "#FFFFFF", borderRadius: 10, borderWidth: 1, borderColor: "#ECECF0", padding: 11, marginTop: 8 },
+  matchName: { color: "#222222", fontSize: 14, fontWeight: "900" },
+  matchMeta: { color: "#555555", fontSize: 12, marginTop: 4 },
+  matchReason: { color: "#555555", fontSize: 12, marginTop: 3 },
+  viewCandidateButton: { backgroundColor: "#D41472", borderRadius: 8, padding: 9, alignItems: "center", marginTop: 8 },
+  viewCandidateButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
   outlineButton: { borderWidth: 1, borderColor: "#D41472", borderRadius: 9, padding: 10, alignItems: "center", marginTop: 10 },
   outlineButtonText: { color: "#D41472", fontWeight: "800" },
 });
