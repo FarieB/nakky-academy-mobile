@@ -204,6 +204,8 @@ export default function EmployerDashboard() {
     router.push("/notifications");
   };
 
+  const openJobPosts = () => router.push("/(employer)/job-posts");
+
   const formatExpiry = () => {
     if (!subscriptionExpiry) {
       return "Not available";
@@ -553,6 +555,17 @@ export default function EmployerDashboard() {
           </Text>
 
           <TouchableOpacity
+            style={[styles.actionCard, { borderColor: "#D41472", borderWidth: 1.5 }]}
+            onPress={() => router.push("/(employer)/job-posts")}
+          >
+            <Text style={styles.actionTitle}>📋  Job Posts</Text>
+            <Text style={{ color: "#666666", marginTop: 6 }}>
+              Create, publish and manage your vacancies
+            </Text>
+          </TouchableOpacity>
+
+
+          <TouchableOpacity
             style={styles.menuRow}
             onPress={openEmployerProfile}
           >
@@ -593,6 +606,8 @@ export default function EmployerDashboard() {
 
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
+
+          
 
           <TouchableOpacity
             style={styles.menuRow}

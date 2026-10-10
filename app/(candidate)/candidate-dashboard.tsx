@@ -51,6 +51,12 @@ type DashboardData = {
     verificationStatus?: string;
     verifiedBadge?: boolean;
   };
+    profileCompletion?: {
+    percentage: number;
+    completed: number;
+    total: number;
+    missing: Record<string, boolean>;
+  };
   [key: string]: any;
 };
 
@@ -78,7 +84,7 @@ export default function CandidateDashboard() {
       const [dashboardResponse, subscriptionResponse] =
         await Promise.allSettled([
           API.get("/dashboard"),
-          API.get("/payments/candidate/subscription-status"),
+         API.get("/payments/candidate-subscription")
         ]);
 
       if (dashboardResponse.status === "fulfilled") {
@@ -149,11 +155,21 @@ export default function CandidateDashboard() {
       dashboard?.profile?.verifiedBadge
   );
 
-  const profileCompleted = Boolean(
-    dashboard?.candidate?.profileCompleted ||
-      dashboard?.profile?.profileCompleted ||
-      dashboard?.profileCompleted
+  const profileCompletion = dashboard?.profileCompletion;
+
+  const profilePercentage = Math.max(
+    0,
+    Math.min(100, profileCompletion?.percentage ?? 0)
   );
+
+  const profileCompleted =
+    profileCompletion != null
+      ? profilePercentage === 100
+      : Boolean(
+          dashboard?.candidate?.profileCompleted ||
+            dashboard?.profile?.profileCompleted ||
+            dashboard?.profileCompleted
+        );
 
   const getSubscriptionLabel = () => {
     if (isMarketplaceActive) {
@@ -382,6 +398,41 @@ export default function CandidateDashboard() {
                 {profileCompleted ? "✓" : "!"}
               </Text>
             </View>
+
+            
+            <View style={styles.completionHeader}>
+              <Text style={styles.profileStatusText}>
+                Profile completion
+              </Text>
+
+              <Text style={styles.completionPercentage}>
+                {profilePercentage}%
+              </Text>
+            </View>
+
+            <View
+              style={styles.progressTrack}
+              accessibilityRole="progressbar"
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: profilePercentage,
+              }}
+            >
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${profilePercentage}%` },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.profileStatusText}>
+              {profileCompletion
+                ? `${profileCompletion.completed} of ${profileCompletion.total} profile sections completed`
+                : "Refresh your dashboard to load your profile completion."}
+            </Text>
+
 
             <TouchableOpacity
               style={styles.outlineButton}
@@ -983,4 +1034,34 @@ const styles = StyleSheet.create({
   footerSpace: {
     height: 20,
   },
+
+  
+  completionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+
+  completionPercentage: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#D41472",
+  },
+
+  progressTrack: {
+    height: 8,
+    backgroundColor: "#E8E8E8",
+    borderRadius: 8,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#D41472",
+    borderRadius: 8,
+  },
+
 });
